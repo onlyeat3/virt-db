@@ -1,6 +1,6 @@
 [workspace]
-members=[
-  "mysql-protocol",
-  "server",
-  "dashboard"
+members = [
+    "msql-srv",
+    "server",
+    "dashboard"
 ]
