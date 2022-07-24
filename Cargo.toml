@@ -1,0 +1,6 @@
+[workspace]
+members=[
+  "mysql-protocol",
+  "server",
+  "dashboard"
+]
