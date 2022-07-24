@@ -6,3 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = "*"
+env_logger = "0.9.0"
+chrono = "0.4.6"
+msql-srv = {path="../msql-srv"}
+mysql = "22.2.0"
+
+clap = {version="3.2.14",features = [ "derive" ]}
+
+slab = "0.4.7"
+sqlparser = "0.18.0"
+redis = "0.21.5"
