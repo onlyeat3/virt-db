@@ -219,9 +219,9 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
         // let r = self.connection.query(query);
         trace!("query:{}", query);
         let query_result_result = self.connection.query_iter(String::from(query));
+        trace!("v:{:?}", query_result);
         match query_result_result {
             Ok(query_result) => {
-                trace!("v:{:?}", query_result);
                 trace!("columns:{:?}", query_result.columns());
                 let cols: Vec<_> = query_result
                     .columns()
@@ -244,7 +244,7 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
                     for (c, col) in cols.iter().enumerate() {
                         trace!("col:{:?}", col);
                         let column_value = &row[col.column.as_ref()];
-                        info!("blob column_value:{:?}",column_value);
+                        trace!("blob column_value:{:?}",column_value);
                         writer.write_col(column_value)?;
                     }
                     writer.end_row()?;
