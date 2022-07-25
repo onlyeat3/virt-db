@@ -46,7 +46,6 @@ extern crate slab;
 
 use std::borrow::Borrow;
 use std::{io, net, thread};
-use std::io::Bytes;
 
 use log::{debug, info, trace};
 use msql_srv::{
@@ -55,7 +54,7 @@ use msql_srv::{
 };
 use mysql::consts::ColumnType;
 use mysql::prelude::Queryable;
-use mysql::{from_row_opt, Conn, QueryResult, Text};
+use mysql::{from_row_opt, Conn, QueryResult, Text, from_value_opt, from_value};
 use slab::Slab;
 
 pub fn start() {
@@ -244,67 +243,9 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
                     trace!("row:{:?}", row);
                     for (c, col) in cols.iter().enumerate() {
                         trace!("col:{:?}", col);
-                        match col.coltype {
-                            ColumnType::MYSQL_TYPE_SHORT => {
-                                let v: Option<i16> = row.get(c);
-                                writer.write_col(v)?
-                            }
-                            ColumnType::MYSQL_TYPE_LONG => {
-                                let v: Option<i32> = row.get(c);
-                                writer.write_col(v)?
-                            }
-                            ColumnType::MYSQL_TYPE_LONGLONG => {
-                                let v: Option<i64> = row.get(c);
-                                writer.write_col(v)?
-                            }
-                            ColumnType::MYSQL_TYPE_FLOAT => {
-                                let v: Option<f32> = row.get(c);
-                                writer.write_col(v)?
-                            }
-                            ColumnType::MYSQL_TYPE_DOUBLE => {
-                                let v: Option<f64> = row.get(c);
-                                writer.write_col(v)?
-                            }
-                            ColumnType::MYSQL_TYPE_STRING => {
-                                let v: Option<String> = row.get(c);
-                                writer.write_col(v)?
-                            }
-                            ColumnType::MYSQL_TYPE_VAR_STRING => {
-                                let opt: Option<Result<String, mysql::FromValueError>> =
-                                    row.get_opt(c);
-                                if let Some(option_v) = opt {
-                                    match option_v {
-                                        Ok(real_v) => {
-                                            // debug!("col_v:{:?}",v);
-                                            if !writer.write_col(real_v).is_ok() {
-                                                return Ok(writer.finish_error(
-                                                    ErrorKind::ER_NO,
-                                                    b"Not Impl",
-                                                )?);
-                                            }
-                                        }
-                                        Err(err) => {
-                                            return Ok(writer.finish_error(
-                                                ErrorKind::ER_NO,
-                                                b"Not Impl",
-                                            )?);
-                                        }
-                                    }
-                                }
-                            }
-                            ColumnType::MYSQL_TYPE_BLOB => {
-                                let v: Option<Vec<u8>> = row.get(c);
-                                writer.write_col(v)?
-                            }
-                            ct => {
-                                let v: Option<String> = row.get(c);
-                                if !writer.write_col(v).is_ok() {
-                                    return Ok(
-                                        writer.finish_error(ErrorKind::ER_NO, b"Not Impl")?
-                                    );
-                                }
-                            }
-                        }
+                        let column_value = &row[col.column.as_ref()];
+                        info!("blob column_value:{:?}",column_value);
+                        writer.write_col(column_value)?;
                     }
                     writer.end_row()?;
                 }
