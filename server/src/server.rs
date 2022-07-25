@@ -319,6 +319,7 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
     fn on_init(&mut self, schema: &str, writer: InitWriter<'_, W>) -> Result<(), Self::Error> {
         debug!("schema:{}", schema);
         self.connection.select_db(schema);
+        writer.ok()?;
         Ok(())
     }
 }
