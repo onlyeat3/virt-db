@@ -46,8 +46,9 @@ extern crate slab;
 
 use std::borrow::Borrow;
 use std::{io, net, thread};
+use std::io::Bytes;
 
-use log::{debug, info};
+use log::{debug, info, trace};
 use msql_srv::{
     Column, ColumnFlags, ErrorKind, InitWriter, MysqlIntermediary, MysqlShim, ParamParser,
     QueryResultWriter, StatementMetaWriter,
@@ -217,103 +218,103 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
 
     fn on_query(&mut self, query: &str, results: QueryResultWriter<W>) -> Result<(), Self::Error> {
         // let r = self.connection.query(query);
-        info!("query:{}", query);
-        let mut query_text_result = self.connection.query_iter(String::from(query));
-        match query_text_result {
-            Ok(query_text) => {
-                info!("v:{:?}", query_text);
-                if let Some(rr) = query_text.into_iter().next() {
-                    if let Some(v) = rr.iter().next() {
-                        let cols: Vec<_> = v
-                            .columns()
-                            .into_iter()
-                            .map(|c| {
-                                let t = c.column_type();
-                                Column {
-                                    table: String::from(c.schema_str().to_owned()),
-                                    column: String::from(c.name_str().to_owned()),
-                                    coltype: t,
-                                    colflags: ColumnFlags::empty(),
-                                }
-                            })
-                            .collect();
-                        let mut writer = results.start(&cols)?;
-                        for row in rr {
-                            for (c, col) in cols.iter().enumerate() {
-                                debug!("col:{:?}", col);
-                                match col.coltype {
-                                    ColumnType::MYSQL_TYPE_SHORT => {
-                                        let v: Option<i16> = row.get(c);
-                                        writer.write_col(v)?
-                                    }
-                                    ColumnType::MYSQL_TYPE_LONG => {
-                                        let v: Option<i32> = row.get(c);
-                                        writer.write_col(v)?
-                                    }
-                                    ColumnType::MYSQL_TYPE_LONGLONG => {
-                                        let v: Option<i64> = row.get(c);
-                                        writer.write_col(v)?
-                                    }
-                                    ColumnType::MYSQL_TYPE_FLOAT => {
-                                        let v: Option<f32> = row.get(c);
-                                        writer.write_col(v)?
-                                    }
-                                    ColumnType::MYSQL_TYPE_DOUBLE => {
-                                        let v: Option<f64> = row.get(c);
-                                        writer.write_col(v)?
-                                    }
-                                    ColumnType::MYSQL_TYPE_STRING => {
-                                        let v: Option<String> = row.get(c);
-                                        writer.write_col(v)?
-                                    }
-                                    ColumnType::MYSQL_TYPE_VAR_STRING => {
-                                        let opt: Option<Result<String, mysql::FromValueError>> =
-                                            row.get_opt(c);
-                                        if let Some(option_v) = opt {
-                                            match option_v {
-                                                Ok(real_v) => {
-                                                    // debug!("col_v:{:?}",v);
-                                                    if !writer.write_col(real_v).is_ok() {
-                                                        return Ok(writer.finish_error(
-                                                            ErrorKind::ER_NO,
-                                                            b"Not Impl",
-                                                        )?);
-                                                    }
-                                                }
-                                                Err(err) => {
-                                                    return Ok(writer.finish_error(
-                                                        ErrorKind::ER_NO,
-                                                        b"Not Impl",
-                                                    )?);
-                                                }
+        trace!("query:{}", query);
+        let query_result_result = self.connection.query_iter(String::from(query));
+        match query_result_result {
+            Ok(query_result) => {
+                trace!("v:{:?}", query_result);
+                trace!("columns:{:?}", query_result.columns());
+                let cols: Vec<_> = query_result
+                    .columns()
+                    .as_ref()
+                    .into_iter()
+                    .map(|c| {
+                        let t = c.column_type();
+                        Column {
+                            table: String::from(c.schema_str().to_owned()),
+                            column: String::from(c.name_str().to_owned()),
+                            coltype: t,
+                            colflags: ColumnFlags::empty(),
+                        }
+                    })
+                    .collect();
+
+                let mut writer = results.start(&cols)?;
+                for row in query_result.flatten() {
+                    trace!("row:{:?}", row);
+                    for (c, col) in cols.iter().enumerate() {
+                        trace!("col:{:?}", col);
+                        match col.coltype {
+                            ColumnType::MYSQL_TYPE_SHORT => {
+                                let v: Option<i16> = row.get(c);
+                                writer.write_col(v)?
+                            }
+                            ColumnType::MYSQL_TYPE_LONG => {
+                                let v: Option<i32> = row.get(c);
+                                writer.write_col(v)?
+                            }
+                            ColumnType::MYSQL_TYPE_LONGLONG => {
+                                let v: Option<i64> = row.get(c);
+                                writer.write_col(v)?
+                            }
+                            ColumnType::MYSQL_TYPE_FLOAT => {
+                                let v: Option<f32> = row.get(c);
+                                writer.write_col(v)?
+                            }
+                            ColumnType::MYSQL_TYPE_DOUBLE => {
+                                let v: Option<f64> = row.get(c);
+                                writer.write_col(v)?
+                            }
+                            ColumnType::MYSQL_TYPE_STRING => {
+                                let v: Option<String> = row.get(c);
+                                writer.write_col(v)?
+                            }
+                            ColumnType::MYSQL_TYPE_VAR_STRING => {
+                                let opt: Option<Result<String, mysql::FromValueError>> =
+                                    row.get_opt(c);
+                                if let Some(option_v) = opt {
+                                    match option_v {
+                                        Ok(real_v) => {
+                                            // debug!("col_v:{:?}",v);
+                                            if !writer.write_col(real_v).is_ok() {
+                                                return Ok(writer.finish_error(
+                                                    ErrorKind::ER_NO,
+                                                    b"Not Impl",
+                                                )?);
                                             }
                                         }
-                                    }
-                                    ColumnType::MYSQL_TYPE_BLOB => {
-                                        let v: Option<String> = row.get(c);
-                                        writer.write_col(v)?
-                                    }
-                                    ct => {
-                                        let v: Option<String> = row.get(c);
-                                        if !writer.write_col(v).is_ok() {
-                                            return Ok(writer
-                                                .finish_error(ErrorKind::ER_NO, b"Not Impl")?);
+                                        Err(err) => {
+                                            return Ok(writer.finish_error(
+                                                ErrorKind::ER_NO,
+                                                b"Not Impl",
+                                            )?);
                                         }
                                     }
                                 }
                             }
+                            ColumnType::MYSQL_TYPE_BLOB => {
+                                let v: Option<Vec<u8>> = row.get(c);
+                                writer.write_col(v)?
+                            }
+                            ct => {
+                                let v: Option<String> = row.get(c);
+                                if !writer.write_col(v).is_ok() {
+                                    return Ok(
+                                        writer.finish_error(ErrorKind::ER_NO, b"Not Impl")?
+                                    );
+                                }
+                            }
                         }
-
-                        return Ok(writer.finish()?);
                     }
+                    writer.end_row()?;
                 }
+
+                return Ok(writer.finish()?);
             }
             Err(err) => {
                 return Ok(results.error(ErrorKind::ER_NO, err.to_string().as_bytes())?);
             }
         }
-
-        Ok(results.error(ErrorKind::ER_NO, b"Not Impl")?)
     }
 
     fn on_init(&mut self, schema: &str, writer: InitWriter<'_, W>) -> Result<(), Self::Error> {
