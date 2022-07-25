@@ -1,0 +1,213 @@
+{
+  // 使用 IntelliSense 了解相关属性。 
+  // 悬停以查看现有属性的描述。
+  // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'msql-srv'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--lib",
+          "--package=msql-srv"
+        ],
+        "filter": {
+          "name": "msql-srv",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'psql_as_mysql'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=psql_as_mysql",
+          "--package=msql-srv"
+        ],
+        "filter": {
+          "name": "psql_as_mysql",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'psql_as_mysql'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=psql_as_mysql",
+          "--package=msql-srv"
+        ],
+        "filter": {
+          "name": "psql_as_mysql",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'serve_one'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=serve_one",
+          "--package=msql-srv"
+        ],
+        "filter": {
+          "name": "serve_one",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'serve_one'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=serve_one",
+          "--package=msql-srv"
+        ],
+        "filter": {
+          "name": "serve_one",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'async'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=async",
+          "--package=msql-srv"
+        ],
+        "filter": {
+          "name": "async",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'main'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=main",
+          "--package=msql-srv"
+        ],
+        "filter": {
+          "name": "main",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'server'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=server",
+          "--package=server"
+        ],
+        "filter": {
+          "name": "server",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'server'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=server",
+          "--package=server"
+        ],
+        "filter": {
+          "name": "server",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'dashboard'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=dashboard",
+          "--package=dashboard"
+        ],
+        "filter": {
+          "name": "dashboard",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'dashboard'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=dashboard",
+          "--package=dashboard"
+        ],
+        "filter": {
+          "name": "dashboard",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
