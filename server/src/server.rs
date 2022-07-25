@@ -56,6 +56,9 @@ use mysql::consts::ColumnType;
 use mysql::prelude::Queryable;
 use mysql::{from_row_opt, Conn, QueryResult, Text, from_value_opt, from_value};
 use slab::Slab;
+use sqlparser::ast::Statement;
+use sqlparser::dialect::MySqlDialect;
+use sqlparser::parser::{Parser, ParserError};
 
 pub fn start() {
     let mut threads = Vec::new();
@@ -96,6 +99,7 @@ struct MySQL {
     connection: Conn,
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     prepared: Slab<Prepared>,
+    dialect: MySqlDialect,
 }
 
 impl MySQL {
@@ -103,6 +107,7 @@ impl MySQL {
         MySQL {
             connection: c,
             prepared: Slab::new(),
+            dialect: MySqlDialect{},
         }
     }
 }
@@ -215,10 +220,17 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
         self.prepared.remove(id as usize);
     }
 
-    fn on_query(&mut self, query: &str, results: QueryResultWriter<W>) -> Result<(), Self::Error> {
+    fn on_query(&mut self, sql: &str, results: QueryResultWriter<W>) -> Result<(), Self::Error> {
         // let r = self.connection.query(query);
-        trace!("query:{}", query);
-        let query_result_result = self.connection.query_iter(String::from(query));
+        trace!("sql:{}", sql);
+        let ast_opt:Result<Vec<Statement>, ParserError> = Parser::parse_sql(&self.dialect, sql);
+        if let Ok(asts) = ast_opt{
+            for ast in asts {
+                trace!("ast:{:?}",ast);
+            }
+        }
+
+        let query_result_result = self.connection.query_iter(String::from(sql));
         trace!("v:{:?}", query_result_result);
         match query_result_result {
             Ok(query_result) => {
