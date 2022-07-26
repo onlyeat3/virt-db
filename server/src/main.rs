@@ -3,10 +3,10 @@ extern crate log;
 
 use std::io::Write;
 
+use chrono::Local;
 use clap::{App, Arg};
 use clap::{AppSettings, Parser};
 use env_logger::{Builder, Target};
-use chrono::Local;
 
 use crate::server::start;
 
@@ -29,10 +29,11 @@ fn init_logger(dev: u8) {
         .format(|buf, record| {
             writeln!(
                 buf,
-                "{} {} [{}] {}",
+                "{} {} [{}:{}] {}",
                 Local::now().format("%Y-%m-%d %H:%M:%S:%3f"),
                 record.level(),
-                record.module_path().unwrap_or("<unnamed>"),
+                record.file().unwrap_or("unknown_file"),
+                record.line().unwrap_or(0),
                 &record.args()
             )
         })
@@ -53,7 +54,7 @@ fn init_logger(dev: u8) {
 //     start().await
 // }
 
-fn main(){
+fn main() {
     let cli = Cli::parse();
     init_logger(cli.dev);
     start()
