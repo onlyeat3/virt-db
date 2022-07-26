@@ -45,7 +45,8 @@ extern crate msql_srv;
 extern crate slab;
 
 use std::borrow::Borrow;
-use std::{io, net, thread};
+use std::collections::HashMap;
+use std::{io, net, result, thread};
 
 use log::{debug, info, trace};
 use msql_srv::{
@@ -54,9 +55,13 @@ use msql_srv::{
 };
 use mysql::consts::ColumnType;
 use mysql::prelude::Queryable;
-use mysql::{from_row_opt, Conn, QueryResult, Text, from_value_opt, from_value};
+use mysql::serde_json::error;
+use mysql::{
+    from_row_opt, from_value, from_value_opt, serde_json, Conn, QueryResult, Row, Text, Value,
+};
+use redis::{Commands, RedisError};
 use slab::Slab;
-use sqlparser::ast::Statement;
+use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::{Parser, ParserError};
 
@@ -66,10 +71,14 @@ pub fn start() {
 
     while let Ok((s, _)) = listener.accept() {
         let v = thread::spawn(move || {
+            //TODO pool
             let url = "mysql://root:root@127.0.0.1:3306";
             let conn_result = Conn::new(url);
             let conn = conn_result.unwrap();
-            let mysql_result = MysqlIntermediary::run_on_tcp(MySQL::new(conn), s);
+            let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+            let redis_conn = client.get_connection().unwrap();
+
+            let mysql_result = MysqlIntermediary::run_on_tcp(MySQL::new(conn, redis_conn), s);
             match mysql_result {
                 Ok(v) => {
                     trace!("result:{:?}", v);
@@ -88,6 +97,39 @@ pub fn start() {
     }
 }
 
+fn handle_mysql_result(
+    query_result_result: Result<QueryResult<Text>, mysql::Error>,
+) -> Result<MySQLResult, mysql::Error> {
+    match query_result_result {
+        Ok(query_result) => {
+            trace!("columns:{:?}", query_result.columns());
+            let cols: Vec<Column> = query_result
+                .columns()
+                .as_ref()
+                .iter()
+                .map(|c| {
+                    let t = c.column_type();
+                    Column {
+                        table: String::from(c.schema_str().to_owned()),
+                        column: String::from(c.name_str().to_owned()),
+                        coltype: t,
+                        colflags: ColumnFlags::empty(),
+                    }
+                })
+                .collect();
+
+            let rows: Vec<Row> = query_result.flatten().collect();
+            let mysql_result = MySQLResult { cols, rows };
+            return Ok(mysql_result);
+        }
+        Err(err) => {
+            error!("get mysql err:{:?}", err);
+            return Err(err);
+        }
+    }
+}
+
+
 // this is where the proxy server implementation starts
 
 struct Prepared {
@@ -95,19 +137,26 @@ struct Prepared {
     params: Vec<Column>,
 }
 
+struct MySQLResult {
+    cols: Vec<Column>,
+    rows: Vec<Row>,
+}
+
 struct MySQL {
     connection: Conn,
+    redis_conn: redis::Connection,
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     prepared: Slab<Prepared>,
     dialect: MySqlDialect,
 }
 
 impl MySQL {
-    fn new(c: mysql::Conn) -> Self {
+    fn new(c: mysql::Conn, redis_conn: redis::Connection) -> Self {
         MySQL {
             connection: c,
+            redis_conn,
             prepared: Slab::new(),
-            dialect: MySqlDialect{},
+            dialect: MySqlDialect {},
         }
     }
 }
@@ -223,49 +272,56 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
     fn on_query(&mut self, sql: &str, results: QueryResultWriter<W>) -> Result<(), Self::Error> {
         // let r = self.connection.query(query);
         trace!("sql:{}", sql);
-        let ast_opt:Result<Vec<Statement>, ParserError> = Parser::parse_sql(&self.dialect, sql);
-        if let Ok(asts) = ast_opt{
+        let ast_opt = Parser::parse_sql(&self.dialect, sql);
+        if let Ok(asts) = ast_opt {
             for ast in asts {
-                trace!("ast:{:?}",ast);
+                trace!("ast:{:?}", ast);
+                if let Statement::Query(boxed_query) = ast {
+                    let query = boxed_query.as_ref();
+                    trace!("ast query:{:?}", query);
+                    if let SetExpr::Select(_select_expr_box) = &query.body {
+                        // let select_expr = select_expr_box.as_ref();
+                        // for table in &select_expr.from {
+                        //     info!("table:{:?}", table);
+                        // }
+                        let redis_key = format!("cache:{:?}", sql);
+                        let cached_value_result: Result<String, RedisError> =
+                            self.redis_conn.get(redis_key);
+                        match cached_value_result {
+                            Ok(v) => {
+                                trace!("cached value:{}", v);
+                            }
+                            Err(err) => {
+                                error!("redis.get error:{:?}", err);
+                            }
+                        };
+                    }
+                    trace!("ast query body:{:?}", query.body);
+                }
             }
         }
 
-        let query_result_result = self.connection.query_iter(String::from(sql));
+        let query_result_result: Result<QueryResult<Text>, mysql::Error> =
+            self.connection.query_iter(String::from(sql));
         trace!("v:{:?}", query_result_result);
-        match query_result_result {
-            Ok(query_result) => {
-                trace!("columns:{:?}", query_result.columns());
-                let cols: Vec<_> = query_result
-                    .columns()
-                    .as_ref()
-                    .into_iter()
-                    .map(|c| {
-                        let t = c.column_type();
-                        Column {
-                            table: String::from(c.schema_str().to_owned()),
-                            column: String::from(c.name_str().to_owned()),
-                            coltype: t,
-                            colflags: ColumnFlags::empty(),
-                        }
-                    })
-                    .collect();
-
-                let mut writer = results.start(&cols)?;
-                for row in query_result.flatten() {
+        let mysql_result_opt = handle_mysql_result(query_result_result);
+        match mysql_result_opt {
+            Ok(mysql_result) => {
+                let mut writer = results.start(&mysql_result.cols)?;
+                for row in mysql_result.rows {
                     trace!("row:{:?}", row);
-                    for (c, col) in cols.iter().enumerate() {
+                    for col in &mysql_result.cols {
                         trace!("col:{:?}", col);
                         let column_value = &row[col.column.as_ref()];
-                        trace!("blob column_value:{:?}",column_value);
+                        trace!("blob column_value:{:?}", column_value);
                         writer.write_col(column_value)?;
                     }
                     writer.end_row()?;
                 }
-
-                return Ok(writer.finish()?);
+                Ok(writer.finish()?)
             }
             Err(err) => {
-                return Ok(results.error(ErrorKind::ER_NO, err.to_string().as_bytes())?);
+                Ok(results.error(ErrorKind::ER_NO, err.to_string().as_bytes())?)
             }
         }
     }
