@@ -1,31 +1,29 @@
-
 extern crate msql_srv;
 extern crate slab;
 
+use std::{io, net, result, thread};
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::{io, net, result, thread};
 
 use log::{debug, info, trace};
-use msql_srv::{
-    Column, ColumnFlags, ErrorKind, InitWriter, MysqlIntermediary, MysqlShim, ParamParser,
-    QueryResultWriter, StatementMetaWriter,
+use mysql::{
+    Conn, from_row_opt, from_value, from_value_opt, QueryResult, Row, serde_json, Text, Value,
 };
 use mysql::consts::ColumnType;
 use mysql::prelude::Queryable;
 use mysql::serde_json::error;
-use mysql::{
-    from_row_opt, from_value, from_value_opt, serde_json, Conn, QueryResult, Row, Text, Value,
-};
 use redis::{Commands, RedisError};
+use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
-use serde::Serializer;
 use slab::Slab;
 use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::{Parser, ParserError};
 
-
+use msql_srv::{
+    Column, ColumnFlags, ErrorKind, InitWriter, MysqlIntermediary, MysqlShim, ParamParser,
+    QueryResultWriter, StatementMetaWriter,
+};
 
 fn handle_mysql_result(
     query_result_result: Result<QueryResult<Text>, mysql::Error>,
@@ -49,7 +47,7 @@ fn handle_mysql_result(
                 .collect();
 
             let rows: Vec<Row> = query_result.flatten().collect();
-            let mysql_result = MySQLResult { cols, rows };
+            let mysql_result = MySQLResult { cols, rows};
             return Ok(mysql_result);
         }
         Err(err) => {
@@ -67,39 +65,94 @@ struct Prepared {
     params: Vec<Column>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(remote="ColumnType")]
+enum ColumnTypeRef{
+    MYSQL_TYPE_DECIMAL = 0,
+    MYSQL_TYPE_TINY,
+    MYSQL_TYPE_SHORT,
+    MYSQL_TYPE_LONG,
+    MYSQL_TYPE_FLOAT,
+    MYSQL_TYPE_DOUBLE,
+    MYSQL_TYPE_NULL,
+    MYSQL_TYPE_TIMESTAMP,
+    MYSQL_TYPE_LONGLONG,
+    MYSQL_TYPE_INT24,
+    MYSQL_TYPE_DATE,
+    MYSQL_TYPE_TIME,
+    MYSQL_TYPE_DATETIME,
+    MYSQL_TYPE_YEAR,
+    MYSQL_TYPE_NEWDATE, // Internal to MySql
+    MYSQL_TYPE_VARCHAR,
+    MYSQL_TYPE_BIT,
+    MYSQL_TYPE_TIMESTAMP2,
+    MYSQL_TYPE_DATETIME2,
+    MYSQL_TYPE_TIME2,
+    MYSQL_TYPE_TYPED_ARRAY, // Used for replication only
+    MYSQL_TYPE_UNKNOWN = 243,
+    MYSQL_TYPE_JSON = 245,
+    MYSQL_TYPE_NEWDECIMAL = 246,
+    MYSQL_TYPE_ENUM = 247,
+    MYSQL_TYPE_SET = 248,
+    MYSQL_TYPE_TINY_BLOB = 249,
+    MYSQL_TYPE_MEDIUM_BLOB = 250,
+    MYSQL_TYPE_LONG_BLOB = 251,
+    MYSQL_TYPE_BLOB = 252,
+    MYSQL_TYPE_VAR_STRING = 253,
+    MYSQL_TYPE_STRING = 254,
+    MYSQL_TYPE_GEOMETRY = 255,
+}
+
+#[derive(Debug, Serialize
+// , serde::Deserialize
+)]
 #[serde(remote = "Column")]
 struct ColumnRef{
     pub table: String,
     pub column: String,
-    #[serde(getter = "Column::coltype")]
+    #[serde(with="ColumnTypeRef")]
     pub coltype: ColumnType,
+    #[serde(skip_serializing)]
     pub colflags: ColumnFlags,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(remote = "Column")]
-struct ColumnTypeRef{
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
+// #[derive(serde::Serialize,
+// serde::Deserialize
+// )]
 struct MySQLResult {
+    #[serde(serialize_with = "column_vec_ser")]
+    // #[serde(deserialize_with = "column_vec_deser")]
     cols: Vec<Column>,
     rows: Vec<Row>,
 }
 
-impl serde::ser::Serialize for MySQLResult {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("MySQLResult", 2)?;
-        // let cols_v:&[u8] = self.cols.conv();
-        state.serialize_field("cols", &self.cols)?;
-        state.serialize_field("rows", &self.rows)?;
-        state.end()
-    }
+fn column_vec_ser<S: Serializer>(
+    vec: &Vec<Column>,
+    serializer: S
+) -> Result<S::Ok, S::Error> {
+    let col_ref_vec:Vec<ColumnRef> = vec.iter().map(|c|{
+        return ColumnRef{
+            column:c.column.clone(),
+            table: c.table.clone(),
+            coltype: c.coltype.clone(),
+            colflags: c.colflags,
+        }
+    })
+        .collect();
+    // let mut col_slice = [&ColumnRef;col_ref_vec.len()];
+    // for (idx,col_ref) in col_ref_vec.as_slice().iter().enumerate() {
+    //     let ref_v = col_ref.clone();
+    //     col_slice[idx] = ref_v;
+    // }
+    let slice:[&ColumnRef] = col_ref_vec.as_slice()
+        .iter()
+        .map(|c|{
+            c.to_owned()
+        })
+        .collect()
+        .as_slice();
+    slice.serialize(serializer)
+    // vec2.serialize(serializer)
 }
 
 pub struct MySQL {
@@ -122,7 +175,7 @@ impl MySQL {
 }
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     MySQL(mysql::Error),
     Io(io::Error),
 }
@@ -232,6 +285,7 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
     fn on_query(&mut self, sql: &str, results: QueryResultWriter<W>) -> Result<(), Self::Error> {
         // let r = self.connection.query(query);
         trace!("sql:{}", sql);
+        let redis_key = format!("cache:{:?}", sql);
         let ast_opt = Parser::parse_sql(&self.dialect, sql);
         if let Ok(asts) = ast_opt {
             for ast in asts {
@@ -244,9 +298,8 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
                         // for table in &select_expr.from {
                         //     info!("table:{:?}", table);
                         // }
-                        let redis_key = format!("cache:{:?}", sql);
                         let cached_value_result: Result<String, RedisError> =
-                            self.redis_conn.get(redis_key);
+                            self.redis_conn.get(redis_key.clone());
                         match cached_value_result {
                             Ok(v) => {
                                 trace!("cached value:{}", v);
@@ -267,6 +320,10 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
         let mysql_result_opt = handle_mysql_result(query_result_result);
         match mysql_result_opt {
             Ok(mysql_result) => {
+                // let json_v = serde_json::to_string(&mysql_result)
+                //     .unwrap_or_default();
+                // trace!("json_v:{}",json_v);
+                // self.redis_conn.set(redis_key.clone(), redis_v.as_str());
                 let mut writer = results.start(&mysql_result.cols)?;
                 for row in mysql_result.rows {
                     trace!("row:{:?}", row);
