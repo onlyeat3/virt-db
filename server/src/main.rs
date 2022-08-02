@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate log;
+extern crate core;
 
 use std::io::Write;
 

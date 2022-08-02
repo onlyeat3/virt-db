@@ -14,7 +14,7 @@ use mysql::prelude::Queryable;
 use mysql::serde_json::error;
 use redis::{Commands, RedisError};
 use serde::{Deserialize, Serialize, Serializer};
-use serde::ser::SerializeStruct;
+use serde::ser::{SerializeSeq, SerializeStruct};
 use slab::Slab;
 use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
@@ -65,8 +65,9 @@ struct Prepared {
     params: Vec<Column>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(remote="ColumnType")]
+// #[derive(Debug, Serialize, Deserialize)]
+// #[serde(remote="ColumnType")]
+#[derive(Debug)]
 enum ColumnTypeRef{
     MYSQL_TYPE_DECIMAL = 0,
     MYSQL_TYPE_TINY,
@@ -103,26 +104,94 @@ enum ColumnTypeRef{
     MYSQL_TYPE_GEOMETRY = 255,
 }
 
-#[derive(Debug, Serialize
+impl ColumnTypeRef {
+    fn from(col_type: &ColumnType) -> ColumnTypeRef {
+        match col_type {
+            ColumnType::MYSQL_TYPE_DECIMAL => ColumnTypeRef::MYSQL_TYPE_DECIMAL,
+            ColumnType::MYSQL_TYPE_TINY => ColumnTypeRef::MYSQL_TYPE_TINY,
+            ColumnType::MYSQL_TYPE_SHORT => ColumnTypeRef::MYSQL_TYPE_SHORT,
+            ColumnType::MYSQL_TYPE_LONG => ColumnTypeRef::MYSQL_TYPE_LONG,
+            ColumnType::MYSQL_TYPE_FLOAT => ColumnTypeRef::MYSQL_TYPE_FLOAT,
+            ColumnType::MYSQL_TYPE_DOUBLE => ColumnTypeRef::MYSQL_TYPE_DOUBLE,
+            ColumnType::MYSQL_TYPE_NULL => ColumnTypeRef::MYSQL_TYPE_NULL,
+            ColumnType::MYSQL_TYPE_TIMESTAMP => ColumnTypeRef::MYSQL_TYPE_TIMESTAMP,
+            ColumnType::MYSQL_TYPE_LONGLONG => ColumnTypeRef::MYSQL_TYPE_LONGLONG,
+            ColumnType::MYSQL_TYPE_INT24 => ColumnTypeRef::MYSQL_TYPE_INT24,
+            ColumnType::MYSQL_TYPE_DATE => ColumnTypeRef::MYSQL_TYPE_DATE,
+            ColumnType::MYSQL_TYPE_TIME => ColumnTypeRef::MYSQL_TYPE_TIME,
+            ColumnType::MYSQL_TYPE_DATETIME => ColumnTypeRef::MYSQL_TYPE_DATETIME,
+            ColumnType::MYSQL_TYPE_YEAR => ColumnTypeRef::MYSQL_TYPE_YEAR,
+            ColumnType::MYSQL_TYPE_NEWDATE => ColumnTypeRef::MYSQL_TYPE_NEWDATE,
+            ColumnType::MYSQL_TYPE_VARCHAR => ColumnTypeRef::MYSQL_TYPE_VARCHAR,
+            ColumnType::MYSQL_TYPE_BIT => ColumnTypeRef::MYSQL_TYPE_BIT,
+            ColumnType::MYSQL_TYPE_TIMESTAMP2 => ColumnTypeRef::MYSQL_TYPE_TIMESTAMP2,
+            ColumnType::MYSQL_TYPE_DATETIME2 => ColumnTypeRef::MYSQL_TYPE_DATETIME2,
+            ColumnType::MYSQL_TYPE_TIME2 => ColumnTypeRef::MYSQL_TYPE_TIME2,
+            ColumnType::MYSQL_TYPE_TYPED_ARRAY => ColumnTypeRef::MYSQL_TYPE_TYPED_ARRAY,
+            ColumnType::MYSQL_TYPE_UNKNOWN => ColumnTypeRef::MYSQL_TYPE_UNKNOWN,
+            ColumnType::MYSQL_TYPE_JSON => ColumnTypeRef::MYSQL_TYPE_JSON,
+            ColumnType::MYSQL_TYPE_NEWDECIMAL => ColumnTypeRef::MYSQL_TYPE_NEWDECIMAL,
+            ColumnType::MYSQL_TYPE_ENUM => ColumnTypeRef::MYSQL_TYPE_ENUM,
+            ColumnType::MYSQL_TYPE_SET => ColumnTypeRef::MYSQL_TYPE_SET,
+            ColumnType::MYSQL_TYPE_TINY_BLOB => ColumnTypeRef::MYSQL_TYPE_TINY_BLOB,
+            ColumnType::MYSQL_TYPE_MEDIUM_BLOB => ColumnTypeRef::MYSQL_TYPE_MEDIUM_BLOB,
+            ColumnType::MYSQL_TYPE_LONG_BLOB => ColumnTypeRef::MYSQL_TYPE_LONG_BLOB,
+            ColumnType::MYSQL_TYPE_BLOB => ColumnTypeRef::MYSQL_TYPE_BLOB,
+            ColumnType::MYSQL_TYPE_VAR_STRING => ColumnTypeRef::MYSQL_TYPE_VAR_STRING,
+            ColumnType::MYSQL_TYPE_STRING => ColumnTypeRef::MYSQL_TYPE_STRING,
+            ColumnType::MYSQL_TYPE_GEOMETRY => ColumnTypeRef::MYSQL_TYPE_GEOMETRY,
+        }
+    }
+}
+
+impl Serialize for ColumnTypeRef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+    {
+        serializer.serialize_str(&*format!("{:?}", self))
+    }
+}
+
+// #[derive(Debug, Serialize
 // , serde::Deserialize
-)]
-#[serde(remote = "Column")]
+// )]
+// #[serde(remote = "Column")]
 struct ColumnRef{
     pub table: String,
     pub column: String,
-    #[serde(with="ColumnTypeRef")]
+    // #[serde(with="ColumnTypeRef")]
     pub coltype: ColumnType,
-    #[serde(skip_serializing)]
+    // #[serde(skip_serializing)]
     pub colflags: ColumnFlags,
 }
 
+// This is what #[derive(Serialize)] would generate.
+impl Serialize for ColumnRef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+    {
+        let mut s = serializer.serialize_struct("Person", 3)?;
+        s.serialize_field("table", &self.table)?;
+        s.serialize_field("column", &self.column)?;
+        s.serialize_field("coltype", &ColumnTypeRef::from(&self.coltype))?;
+        s.serialize_field("colflags", &*format!("{:?}",self.colflags))?;
+        s.end()
+    }
+}
+
 // #[derive(serde::Serialize,
-// serde::Deserialize
+// // serde::Deserialize
 // )]
+#[derive(Serialize
+// , Deserialize
+, Debug, PartialEq)]
 struct MySQLResult {
     #[serde(serialize_with = "column_vec_ser")]
     // #[serde(deserialize_with = "column_vec_deser")]
     cols: Vec<Column>,
+    #[serde(skip_serializing)]
     rows: Vec<Row>,
 }
 
@@ -130,29 +199,17 @@ fn column_vec_ser<S: Serializer>(
     vec: &Vec<Column>,
     serializer: S
 ) -> Result<S::Ok, S::Error> {
-    let col_ref_vec:Vec<ColumnRef> = vec.iter().map(|c|{
-        return ColumnRef{
+    let mut seq = serializer.serialize_seq(Some(vec.len()))?;
+    for c in vec {
+        let col_ref = ColumnRef{
             column:c.column.clone(),
             table: c.table.clone(),
             coltype: c.coltype.clone(),
             colflags: c.colflags,
-        }
-    })
-        .collect();
-    // let mut col_slice = [&ColumnRef;col_ref_vec.len()];
-    // for (idx,col_ref) in col_ref_vec.as_slice().iter().enumerate() {
-    //     let ref_v = col_ref.clone();
-    //     col_slice[idx] = ref_v;
-    // }
-    let slice:[&ColumnRef] = col_ref_vec.as_slice()
-        .iter()
-        .map(|c|{
-            c.to_owned()
-        })
-        .collect()
-        .as_slice();
-    slice.serialize(serializer)
-    // vec2.serialize(serializer)
+        };
+        seq.serialize_element(&col_ref)?;
+    }
+    seq.end()
 }
 
 pub struct MySQL {
@@ -320,9 +377,9 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
         let mysql_result_opt = handle_mysql_result(query_result_result);
         match mysql_result_opt {
             Ok(mysql_result) => {
-                // let json_v = serde_json::to_string(&mysql_result)
-                //     .unwrap_or_default();
-                // trace!("json_v:{}",json_v);
+                let json_v = serde_json::to_string(&mysql_result)
+                    .unwrap_or_default();
+                trace!("json_v:{}",json_v);
                 // self.redis_conn.set(redis_key.clone(), redis_v.as_str());
                 let mut writer = results.start(&mysql_result.cols)?;
                 for row in mysql_result.rows {
