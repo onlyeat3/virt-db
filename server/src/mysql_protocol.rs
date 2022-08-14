@@ -259,6 +259,10 @@ impl From<mysql_async::Error> for VirtDBMySQLError {
 impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
     type Error = VirtDBMySQLError;
 
+    fn version(&self) -> &str {
+        "virt-db 1.0.0-alpha"
+    }
+
     async fn on_prepare<'a>(&'a mut self, query: &'a str, info: StatementMetaWriter<'a, W>) -> Result<(), Self::Error> {
         match self.connection.prep(query).await {
             Ok(stmt) => {
