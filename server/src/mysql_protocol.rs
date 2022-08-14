@@ -8,6 +8,7 @@ use log::{debug, error, info, trace};
 use mysql_async::{Conn, Error, from_row_opt, from_value, from_value_opt, QueryResult, Row, TextProtocol, Value};
 use mysql_async::consts::ColumnType;
 use mysql_async::prelude::Queryable;
+use nom::combinator::iterator;
 use redis::{Commands, RedisError};
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::{SerializeSeq, SerializeStruct};
@@ -378,20 +379,22 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
         let mysql_result_opt = match query_result_result {
             Ok(mut query_result) => {
                 trace!("columns:{:?}", query_result.columns());
-                let cols: Vec<Column> = query_result
-                    .columns()
-                    .iter()
-                    .map(|c_arc| {
-                        let c = c_arc.to_vec().get(0).unwrap().clone();
-                        let t = c.column_type();
-                        Column {
-                            table: String::from(c.schema_str().to_owned()),
-                            column: String::from(c.name_str().to_owned()),
-                            coltype: t,
-                            colflags: c.flags(),
-                        }
-                    })
-                    .collect();
+                let mut cols: Vec<Column> = vec![];
+                for arc_col in query_result.columns() {
+                    cols = arc_col.iter()
+                        .map(|c| {
+                            let t = c.column_type();
+                            let rc = Column {
+                                table: String::from(c.schema_str().to_owned()),
+                                column: String::from(c.name_str().to_owned()),
+                                coltype: t,
+                                colflags: c.flags(),
+                            };
+                            return rc;
+                        })
+                        .collect();
+                }
+
                 let rows_result = query_result.collect::<Row>().await;
                 match rows_result {
                     Ok(rows) => {
@@ -439,16 +442,16 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
         debug!("schema:{}", schema);
         // self.connection.select_db(schema);
         let command_select_db = format!("use {schema}");
-        let r:Result<Vec<(u32,String)>, mysql_async::Error> = self.connection.query(command_select_db.as_str()).await;
+        let r: Result<Vec<(u32, String)>, mysql_async::Error> = self.connection.query(command_select_db.as_str()).await;
         return match r {
-            Ok(_)=>{
+            Ok(_) => {
                 writer.ok()?;
                 Ok(())
-            },
-            Err(e)=>{
+            }
+            Err(e) => {
                 Err(e.into())
             }
-        }
+        };
     }
 }
 
