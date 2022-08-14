@@ -8,10 +8,15 @@ edition = "2021"
 [dependencies]
 log = "*"
 env_logger = "0.9.0"
-chrono = "0.4.6"
-msql-srv = {path="../msql-srv"}
-mysql = "22.2.0"
-mysql_common = "0.28.2"
+
+async-trait = "0.1.52"
+byteorder = "1.4.3"
+chrono = "0.4.19"
+mysql_common = { version = "0.29.0", features = ["chrono"] }
+nom = "7.1.0"
+tokio = { version = "1.17.0", features = ["full"] }
+opensrv-mysql = {path="../opensrv-mysql"}
+mysql_async = "0.30.0"
 
 clap = {version="3.2.14",features = [ "derive" ]}
 

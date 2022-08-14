@@ -1,7 +1,9 @@
 #[macro_use]
 extern crate log;
 extern crate core;
+extern crate tokio;
 
+use std::error::Error;
 use std::io::Write;
 
 use chrono::Local;
@@ -50,15 +52,9 @@ fn init_logger(dev: u8) {
     // };
 }
 
-// #[tokio::main]
-// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//     let cli = Cli::parse();
-//     init_logger(cli.dev);
-//     start().await
-// }
-
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     init_logger(cli.dev);
-    start()
+    start().await
 }

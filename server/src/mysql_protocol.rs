@@ -1,17 +1,13 @@
-extern crate msql_srv;
 extern crate slab;
 
 use std::{io, net, result, thread};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 
-use log::{debug, info, trace};
-use mysql::{
-    Conn, from_row_opt, from_value, from_value_opt, QueryResult, Row, serde_json, Text, Value,
-};
-use mysql::consts::ColumnType;
-use mysql::prelude::Queryable;
-use mysql::serde_json::error;
+use log::{debug, error, info, trace};
+use mysql_async::{Conn, Error, from_row_opt, from_value, from_value_opt, QueryResult, Row, TextProtocol, Value};
+use mysql_async::consts::ColumnType;
+use mysql_async::prelude::Queryable;
 use redis::{Commands, RedisError};
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::{SerializeSeq, SerializeStruct};
@@ -20,55 +16,62 @@ use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::{Parser, ParserError};
 
-use msql_srv::{
-    Column, ColumnFlags, ErrorKind, InitWriter, MysqlIntermediary, MysqlShim, ParamParser,
-    QueryResultWriter, StatementMetaWriter,
-};
+use opensrv_mysql::{AsyncMysqlIntermediary, AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, ParamParser, QueryResultWriter, StatementMetaWriter};
 
-fn handle_mysql_result(
-    query_result_result: Result<QueryResult<Text>, mysql::Error>,
-) -> Result<MySQLResult, mysql::Error> {
-    match query_result_result {
-        Ok(query_result) => {
-            trace!("columns:{:?}", query_result.columns());
-            let cols: Vec<Column> = query_result
-                .columns()
-                .as_ref()
-                .iter()
-                .map(|c| {
-                    let t = c.column_type();
-                    Column {
-                        table: String::from(c.schema_str().to_owned()),
-                        column: String::from(c.name_str().to_owned()),
-                        coltype: t,
-                        colflags: c.flags(),
-                    }
-                })
-                .collect();
-
-            let rows: Vec<Row> = query_result.flatten().collect();
-            let mysql_result = MySQLResult { cols, rows};
-            return Ok(mysql_result);
-        }
-        Err(err) => {
-            error!("get mysql err:{:?}", err);
-            return Err(err);
-        }
-    }
-}
+//
+// async fn handle_mysql_result<'a>(
+//     query_result_result: &'a Result<&'a QueryResult<TextProtocol>, &'a mysql_async::Error>,
+// ) -> Result<MySQLResult, mysql_async::Error> {
+//     return match query_result_result {
+//         Ok(mut query_result) => {
+//             trace!("columns:{:?}", query_result.columns());
+//             let cols: Vec<Column> = query_result
+//                 .columns()
+//                 .iter()
+//                 .map(|c_arc| {
+//                     let c = c_arc.to_vec().get(0).unwrap().clone();
+//                     let t = c.column_type();
+//                     Column {
+//                         table: String::from(c.schema_str().to_owned()),
+//                         column: String::from(c.name_str().to_owned()),
+//                         coltype: t,
+//                         colflags: c.flags(),
+//                     }
+//                 })
+//                 .collect();
+//             let rows_result = query_result.collect::<Row>().await;
+//             match rows_result {
+//                 Ok(rows) => {
+//                     let mysql_result = MySQLResult { cols, rows };
+//                     Ok(mysql_result)
+//                 }
+//                 Err(err) => {
+//                     error!("get mysql err:{:?}", err);
+//                     Err(err)
+//                 }
+//             }
+//             // let rows: Vec<Row> = query_result.flatten().collect();
+//
+//         }
+//         Err(err) => {
+//             error!("get mysql err:{:?}", err);
+//             err
+//         }
+//     }
+// }
 
 
 // this is where the proxy server implementation starts
 
 struct Prepared {
-    stmt: mysql::Statement,
+    stmt: mysql_async::Statement,
     params: Vec<Column>,
 }
 
 // #[derive(Debug, Serialize, Deserialize)]
 // #[serde(remote="ColumnType")]
 #[derive(Debug)]
-enum ColumnTypeRef{
+enum ColumnTypeRef {
     MYSQL_TYPE_DECIMAL = 0,
     MYSQL_TYPE_TINY,
     MYSQL_TYPE_SHORT,
@@ -83,13 +86,15 @@ enum ColumnTypeRef{
     MYSQL_TYPE_TIME,
     MYSQL_TYPE_DATETIME,
     MYSQL_TYPE_YEAR,
-    MYSQL_TYPE_NEWDATE, // Internal to MySql
+    MYSQL_TYPE_NEWDATE,
+    // Internal to MySql
     MYSQL_TYPE_VARCHAR,
     MYSQL_TYPE_BIT,
     MYSQL_TYPE_TIMESTAMP2,
     MYSQL_TYPE_DATETIME2,
     MYSQL_TYPE_TIME2,
-    MYSQL_TYPE_TYPED_ARRAY, // Used for replication only
+    MYSQL_TYPE_TYPED_ARRAY,
+    // Used for replication only
     MYSQL_TYPE_UNKNOWN = 243,
     MYSQL_TYPE_JSON = 245,
     MYSQL_TYPE_NEWDECIMAL = 246,
@@ -157,7 +162,7 @@ impl Serialize for ColumnTypeRef {
 // , serde::Deserialize
 // )]
 // #[serde(remote = "Column")]
-struct ColumnRef{
+struct ColumnRef {
     pub table: String,
     pub column: String,
     // #[serde(with="ColumnTypeRef")]
@@ -176,7 +181,7 @@ impl Serialize for ColumnRef {
         s.serialize_field("table", &self.table)?;
         s.serialize_field("column", &self.column)?;
         s.serialize_field("coltype", &ColumnTypeRef::from(&self.coltype))?;
-        s.serialize_field("colflags", &*format!("{:?}",self.colflags))?;
+        s.serialize_field("colflags", &*format!("{:?}", self.colflags))?;
         s.end()
     }
 }
@@ -197,12 +202,12 @@ struct MySQLResult {
 
 fn column_vec_ser<S: Serializer>(
     vec: &Vec<Column>,
-    serializer: S
+    serializer: S,
 ) -> Result<S::Ok, S::Error> {
     let mut seq = serializer.serialize_seq(Some(vec.len()))?;
     for c in vec {
-        let col_ref = ColumnRef{
-            column:c.column.clone(),
+        let col_ref = ColumnRef {
+            column: c.column.clone(),
             table: c.table.clone(),
             coltype: c.coltype.clone(),
             colflags: c.colflags,
@@ -221,7 +226,7 @@ pub struct MySQL {
 }
 
 impl MySQL {
-    pub fn new(c: mysql::Conn, redis_conn: redis::Connection) -> Self {
+    pub fn new(c: mysql_async::Conn, redis_conn: redis::Connection) -> Self {
         MySQL {
             connection: c,
             redis_conn,
@@ -232,32 +237,30 @@ impl MySQL {
 }
 
 #[derive(Debug)]
-pub enum Error {
-    MySQL(mysql::Error),
+pub enum VirtDBMySQLError {
+    MySQL_ASYNC(mysql_async::Error),
     Io(io::Error),
 }
 
-impl From<io::Error> for Error {
+impl From<io::Error> for VirtDBMySQLError {
     fn from(e: io::Error) -> Self {
-        Error::Io(e)
+        VirtDBMySQLError::Io(e)
     }
 }
 
-impl From<mysql::Error> for Error {
-    fn from(e: mysql::Error) -> Self {
-        Error::MySQL(e)
+impl From<mysql_async::Error> for VirtDBMySQLError {
+    fn from(e: Error) -> Self {
+        VirtDBMySQLError::MySQL_ASYNC(e)
     }
 }
 
-impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
-    type Error = Error;
+#[async_trait::async_trait]
+impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
+    type Error = VirtDBMySQLError;
 
-    fn on_prepare(&mut self, query: &str, info: StatementMetaWriter<W>) -> Result<(), Self::Error> {
-        match self.connection.prep(query) {
+    async fn on_prepare<'a>(&'a mut self, query: &'a str, info: StatementMetaWriter<'a, W>) -> Result<(), Self::Error> {
+        match self.connection.prep(query).await {
             Ok(stmt) => {
-                // the PostgreSQL server will tell us about the parameter types and output columns
-                // of the query we just prepared. we now need to communicate this back to our MySQL
-                // client, which requires translating between psql and mysql types.
                 use std::mem;
                 let params: Vec<_> = stmt
                     .params()
@@ -303,16 +306,13 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
                 Ok(())
             }
 
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                Err(e.into())
+            }
         }
     }
 
-    fn on_execute(
-        &mut self,
-        id: u32,
-        ps: ParamParser,
-        results: QueryResultWriter<W>,
-    ) -> Result<(), Self::Error> {
+    async fn on_execute<'a>(&'a mut self, id: u32, params: ParamParser<'a>, results: QueryResultWriter<'a, W>) -> Result<(), Self::Error> {
         match self.prepared.get_mut(id as usize) {
             None => Ok(results.error(ErrorKind::ER_NO, b"no such prepared statement")?),
             Some(&mut Prepared { ref mut stmt, .. }) => {
@@ -334,12 +334,12 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
         }
     }
 
-    fn on_close(&mut self, id: u32) {
+    async fn on_close<'a>(&'a mut self, id: u32) where W: 'async_trait {
         debug!("connection {} closed", id);
         self.prepared.remove(id as usize);
     }
 
-    fn on_query(&mut self, sql: &str, results: QueryResultWriter<W>) -> Result<(), Self::Error> {
+    async fn on_query<'a>(&'a mut self, sql: &'a str, results: QueryResultWriter<'a, W>) -> Result<(), Self::Error> {
         // let r = self.connection.query(query);
         trace!("sql:{}", sql);
         let redis_key = format!("cache:{:?}", sql);
@@ -371,10 +371,45 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
             }
         }
 
-        let query_result_result: Result<QueryResult<Text>, mysql::Error> =
-            self.connection.query_iter(String::from(sql));
+        let query_result_result: Result<QueryResult<TextProtocol>, mysql_async::Error> =
+            self.connection.query_iter(String::from(sql)).await;
         trace!("v:{:?}", query_result_result);
-        let mysql_result_opt = handle_mysql_result(query_result_result);
+        // let mysql_result_opt = handle_mysql_result(query_result_result).await;
+        let mysql_result_opt = match query_result_result {
+            Ok(mut query_result) => {
+                trace!("columns:{:?}", query_result.columns());
+                let cols: Vec<Column> = query_result
+                    .columns()
+                    .iter()
+                    .map(|c_arc| {
+                        let c = c_arc.to_vec().get(0).unwrap().clone();
+                        let t = c.column_type();
+                        Column {
+                            table: String::from(c.schema_str().to_owned()),
+                            column: String::from(c.name_str().to_owned()),
+                            coltype: t,
+                            colflags: c.flags(),
+                        }
+                    })
+                    .collect();
+                let rows_result = query_result.collect::<Row>().await;
+                match rows_result {
+                    Ok(rows) => {
+                        let mysql_result = MySQLResult { cols, rows };
+                        Ok(mysql_result)
+                    }
+                    Err(err) => {
+                        error!("get mysql err:{:?}", err);
+                        Err(err)
+                    }
+                }
+                // let rows: Vec<Row> = query_result.flatten().collect();
+            }
+            Err(err) => {
+                error!("get mysql err:{:?}", err);
+                Err(err.into())
+            }
+        };
         match mysql_result_opt {
             Ok(mysql_result) => {
                 let json_v = serde_json::to_string(&mysql_result)
@@ -400,11 +435,20 @@ impl<W: io::Read + io::Write> MysqlShim<W> for MySQL {
         }
     }
 
-    fn on_init(&mut self, schema: &str, writer: InitWriter<'_, W>) -> Result<(), Self::Error> {
+    async fn on_init<'a>(&'a mut self, schema: &'a str, writer: InitWriter<'a, W>) -> Result<(), Self::Error> {
         debug!("schema:{}", schema);
-        self.connection.select_db(schema);
-        writer.ok()?;
-        Ok(())
+        // self.connection.select_db(schema);
+        let command_select_db = format!("use {schema}");
+        let r:Result<Vec<(u32,String)>, mysql_async::Error> = self.connection.query(command_select_db.as_str()).await;
+        return match r {
+            Ok(_)=>{
+                writer.ok()?;
+                Ok(())
+            },
+            Err(e)=>{
+                Err(e.into())
+            }
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "msql-srv",
+    "opensrv-mysql",
     "server",
     "dashboard"
 ]

@@ -1,37 +1,32 @@
-use std::{net, thread};
-use mysql::Conn;
-use msql_srv::MysqlIntermediary;
-use log::{trace,error,debug,info};
-use crate::mysql_protocol::MySQL;
+use std::error::Error;
+use std::io;
 
-pub fn start() {
-    let mut threads = Vec::new();
-    let listener = net::TcpListener::bind("127.0.0.1:3307").unwrap();
+use crate::mysql_protocol::{MySQL, VirtDBMySQLError};
+use log::{debug, error, info, trace};
+use mysql_async::{Conn, OptsBuilder};
+use opensrv_mysql::*;
+use tokio::net::TcpListener;
 
-    while let Ok((s, _)) = listener.accept() {
-        let v = thread::spawn(move || {
-            //TODO pool
-            let url = "mysql://root:root@127.0.0.1:3306";
-            let conn_result = Conn::new(url);
-            let conn = conn_result.unwrap();
-            let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-            let redis_conn = client.get_connection().unwrap();
 
-            let mysql_result = MysqlIntermediary::run_on_tcp(MySQL::new(conn, redis_conn), s);
-            match mysql_result {
-                Ok(v) => {
-                    trace!("result:{:?}", v);
-                }
-                Err(error) => {
-                    error!("{:?}", error);
-                }
-            }
-        });
-        debug!("New connection established");
-        threads.push(v);
-    }
+pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
+    let listener = TcpListener::bind("127.0.0.1:3307").await?;
+    loop{
+        let (stream, _) = listener.accept().await?;
+        //TODO pool
+        let url = "mysql://root:root@127.0.0.1:3306";
+        let conn = Conn::from_url(url).await?;
+        let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+        let redis_conn = client.get_connection().unwrap();
 
-    for t in threads {
-        t.join().unwrap();
+        AsyncMysqlIntermediary::run_on(MySQL::new( conn,redis_conn), stream).await;
+        // tokio::spawn(async move {
+        //     //TODO pool
+        //     let url = "mysql://root:root@127.0.0.1:3306";
+        //     let conn = Conn::from_url(url).await?;
+        //     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+        //     let redis_conn = client.get_connection().unwrap();
+        //
+        //     AsyncMysqlIntermediary::run_on(MySQL::new( conn,redis_conn), stream).await
+        // });
     }
 }

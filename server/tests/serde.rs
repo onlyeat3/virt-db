@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use mysql::serde_json;
+use mysql_async::serde_json;
 use redis::{Commands, RedisResult, RedisWrite, ToRedisArgs};
 use sqlparser::keywords::Keyword::FROM;
 
