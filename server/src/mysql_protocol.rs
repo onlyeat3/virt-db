@@ -9,7 +9,8 @@ use mysql_async::{Conn, Error, from_row_opt, from_value, from_value_opt, QueryRe
 use mysql_async::consts::ColumnType;
 use mysql_async::prelude::Queryable;
 use nom::combinator::iterator;
-use redis::{Commands, RedisError};
+use redis::{AsyncCommands, Commands, RedisError, RedisResult};
+use redis::aio::Connection;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use slab::Slab;
@@ -220,14 +221,14 @@ fn column_vec_ser<S: Serializer>(
 
 pub struct MySQL {
     connection: Conn,
-    redis_conn: redis::Connection,
+    redis_conn: Connection,
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     prepared: Slab<Prepared>,
     dialect: MySqlDialect,
 }
 
 impl MySQL {
-    pub fn new(c: mysql_async::Conn, redis_conn: redis::Connection) -> Self {
+    pub fn new(c: mysql_async::Conn, redis_conn: Connection) -> Self {
         MySQL {
             connection: c,
             redis_conn,
@@ -361,7 +362,7 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                         //     info!("table:{:?}", table);
                         // }
                         let cached_value_result: Result<String, RedisError> =
-                            self.redis_conn.get(redis_key.clone());
+                            self.redis_conn.get(redis_key.clone()).await;
                         match cached_value_result {
                             Ok(v) => {
                                 trace!("cached value:{}", v);
@@ -422,7 +423,7 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                 let json_v = serde_json::to_string(&mysql_result)
                     .unwrap_or_default();
                 trace!("json_v:{}",json_v);
-                // self.redis_conn.set(redis_key.clone(), redis_v.as_str());
+                let rv:RedisResult<Vec<Vec<u8>>> = self.redis_conn.set(redis_key.clone(),json_v.as_str()).await;
                 let mut writer = results.start(&mysql_result.cols)?;
                 for row in mysql_result.rows {
                     trace!("row:{:?}", row);

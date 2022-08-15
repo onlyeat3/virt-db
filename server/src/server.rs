@@ -16,7 +16,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         let url = "mysql://root:root@127.0.0.1:3306";
         let conn = Conn::from_url(url).await?;
         let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-        let redis_conn = client.get_connection().unwrap();
+        let redis_conn = client.get_async_connection().await?;
 
         AsyncMysqlIntermediary::run_on(MySQL::new( conn,redis_conn), stream).await;
         // tokio::spawn(async move {
