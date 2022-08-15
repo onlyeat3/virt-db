@@ -18,6 +18,7 @@ use crate::server::start;
 mod server;
 mod mysql_protocol;
 mod conv;
+mod serde;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

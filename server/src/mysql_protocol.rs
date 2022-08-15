@@ -188,35 +188,12 @@ impl Serialize for ColumnRef {
     }
 }
 
-// #[derive(serde::Serialize,
-// // serde::Deserialize
-// )]
-#[derive(Serialize
-// , Deserialize
-, Debug, PartialEq)]
-struct MySQLResult {
-    #[serde(serialize_with = "column_vec_ser")]
+#[derive(Debug)]
+pub struct MySQLResult {
+    // #[serde(serialize_with = "column_vec_ser")]
     // #[serde(deserialize_with = "column_vec_deser")]
-    cols: Vec<Column>,
-    #[serde(skip_serializing)]
-    rows: Vec<Row>,
-}
-
-fn column_vec_ser<S: Serializer>(
-    vec: &Vec<Column>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let mut seq = serializer.serialize_seq(Some(vec.len()))?;
-    for c in vec {
-        let col_ref = ColumnRef {
-            column: c.column.clone(),
-            table: c.table.clone(),
-            coltype: c.coltype.clone(),
-            colflags: c.colflags,
-        };
-        seq.serialize_element(&col_ref)?;
-    }
-    seq.end()
+    pub cols: Vec<Column>,
+    pub rows: Vec<Row>,
 }
 
 pub struct MySQL {
@@ -363,14 +340,22 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                         // }
                         let cached_value_result: Result<String, RedisError> =
                             self.redis_conn.get(redis_key.clone()).await;
-                        match cached_value_result {
-                            Ok(v) => {
-                                trace!("cached value:{}", v);
+                        if let Ok(redis_v)= cached_value_result{
+                            let mysql_result:MySQLResult = serde_json::from_str(&*redis_v).unwrap();
+                            trace!("decoded_v:{:?}",mysql_result);
+                            let mut writer = results.start(&mysql_result.cols)?;
+                            for row in mysql_result.rows {
+                                trace!("row:{:?}", row);
+                                for col in &mysql_result.cols {
+                                    trace!("col:{:?}", col);
+                                    let column_value = &row[col.column.as_ref()];
+                                    trace!("blob column_value:{:?}", column_value);
+                                    writer.write_col(column_value)?;
+                                }
+                                writer.end_row()?;
                             }
-                            Err(err) => {
-                                error!("redis.get error:{:?}", err);
-                            }
-                        };
+                            return Ok(writer.finish()?)
+                        }
                     }
                     trace!("ast query body:{:?}", query.body);
                 }
