@@ -36,6 +36,37 @@ fn test_serde() {
     println!("v:{:?}", v);
 }
 
+
+pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: MySqlDialect) -> bool {
+    let tokens1: Vec<Token> = Tokenizer::new(&dialect, pattern)
+        .tokenize()
+        .unwrap_or_default();
+    let tokens2: Vec<Token> = Tokenizer::new(&dialect, sql2)
+        .tokenize()
+        .unwrap_or_default();
+
+    if tokens1.len() != tokens2.len() {
+        return false;
+    }
+
+    for index in 0..tokens1.len() {
+        let a = &tokens1[index];
+        let b = &tokens2[index];
+        let skip = match a {
+            Token::Placeholder(_) => true,
+            _ => false,
+        };
+        if skip {
+            continue;
+        }
+        if a != b {
+            return false;
+        }
+        println!("{:?},{:?},same:{:?}", a, b, a == b);
+    }
+    return false;
+}
+
 #[test]
 fn test_match() {
     let sql = "SELECT * from user_01 where ID = 123 and name = 'abc123'";
