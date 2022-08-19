@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use actix_files as fs;
 
 use actix_web::{
     body::BoxBody,
@@ -41,6 +42,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(tera))
             .wrap(middleware::Logger::default()) // enable logger
+            .service(actix_files::Files::new("/public", "dashboard/public").show_files_listing().use_last_modified(true))
             .service(web::resource("/").route(web::get().to(index)))
             .service(web::scope("").wrap(error_handlers()))
     })
