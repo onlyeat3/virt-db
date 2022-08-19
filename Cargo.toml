@@ -2,5 +2,5 @@
 members = [
     "opensrv-mysql",
     "server",
-    "dashboard"
+    "dashboard/dashboard-api"
 ]
