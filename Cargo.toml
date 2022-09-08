@@ -2,5 +2,12 @@
 members = [
     "opensrv-mysql",
     "server",
-    "admin"
+    "admin/app", "admin/bin", "admin/configs", "admin/db", "admin/migration"
 ]
+[profile.release]
+codegen-units = 1
+debug = false
+lto = true
+opt-level = "z" # Optimize for size.
+panic = 'abort'
+# strip = "symbols" # none(false) debuginfo symbols(true).
