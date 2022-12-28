@@ -18,7 +18,8 @@ use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::{Parser, ParserError};
 
-use opensrv_mysql::{AsyncMysqlIntermediary, AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, ParamParser, QueryResultWriter, StatementMetaWriter};
+use opensrv_mysql::{AsyncMysqlIntermediary, AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, OkResponse, ParamParser, QueryResultWriter, StatementMetaWriter};
+use tokio::io::AsyncWrite;
 
 //
 // async fn handle_mysql_result<'a>(
@@ -116,7 +117,7 @@ impl From<mysql_async::Error> for VirtDBMySQLError {
 }
 
 #[async_trait::async_trait]
-impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
+impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
     type Error = VirtDBMySQLError;
 
     fn version(&self) -> &str {
@@ -167,7 +168,7 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
 
                 let id = self.prepared.insert(stmt);
                 let stmt = &self.prepared[id];
-                info.reply(id as u32, &stmt.params, &columns)?;
+                info.reply(id as u32, &stmt.params, &columns).await;
                 Ok(())
             }
 
@@ -178,8 +179,8 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
     }
 
     async fn on_execute<'a>(&'a mut self, id: u32, params: ParamParser<'a>, results: QueryResultWriter<'a, W>) -> Result<(), Self::Error> {
-        match self.prepared.get_mut(id as usize) {
-            None => Ok(results.error(ErrorKind::ER_NO, b"no such prepared statement")?),
+         let r = match self.prepared.get_mut(id as usize) {
+            None => results.error(ErrorKind::ER_NO, b"no such prepared statement"),
             Some(&mut Prepared { ref mut stmt, .. }) => {
                 // let args = ps.into_iter()
                 //     .map(|p|{
@@ -194,12 +195,14 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                 //     .collect();
                 // String::from("");
                 // self.connection.query();
-                Ok(results.error(ErrorKind::ER_NO, b"no such prepared statement")?)
+                // results.completed(OkResponse::default()).await
+                results.error(ErrorKind::ER_NO, b"no such prepared statement")
             }
-        }
+        }.await;
+        Ok(r?)
     }
 
-    async fn on_close<'a>(&'a mut self, id: u32) where W: 'async_trait {
+    async fn on_close(&mut self, id: u32) {
         debug!("connection {} closed", id);
         self.prepared.remove(id as usize);
     }
@@ -225,7 +228,7 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                         if let Ok(redis_v)= cached_value_result{
                             let mysql_result:MySQLResult = serde_json::from_str(&*redis_v).unwrap();
                             trace!("decoded_v:{:?}",mysql_result);
-                            let mut writer = results.start(&mysql_result.cols)?;
+                            let mut writer = results.start(&mysql_result.cols).await?;
                             for row in mysql_result.rows {
                                 trace!("row:{:?}", row);
                                 for col in &mysql_result.cols {
@@ -234,9 +237,9 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                                     trace!("blob column_value:{:?}", column_value);
                                     writer.write_col(column_value)?;
                                 }
-                                writer.end_row()?;
+                                writer.end_row().await?;
                             }
-                            return Ok(writer.finish()?)
+                            return Ok(writer.finish().await?)
                         }
                     }
                     trace!("ast query body:{:?}", query.body);
@@ -291,7 +294,7 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                     .unwrap_or_default();
                 trace!("json_v:{}",json_v);
                 let rv:RedisResult<Vec<Vec<u8>>> = self.redis_conn.set(redis_key.clone(),json_v.as_str()).await;
-                let mut writer = results.start(&mysql_result.cols)?;
+                let mut writer = results.start(&mysql_result.cols).await?;
                 for row in mysql_result.rows {
                     trace!("row:{:?}", row);
                     for col in &mysql_result.cols {
@@ -300,12 +303,12 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
                         trace!("blob column_value:{:?}", column_value);
                         writer.write_col(column_value)?;
                     }
-                    writer.end_row()?;
+                    writer.end_row().await?;
                 }
-                Ok(writer.finish()?)
+                Ok(writer.finish().await?)
             }
             Err(err) => {
-                Ok(results.error(ErrorKind::ER_NO, err.to_string().as_bytes())?)
+                Ok(results.error(ErrorKind::ER_NO, err.to_string().as_bytes()).await?)
             }
         }
     }
@@ -317,8 +320,7 @@ impl<W: io::Write + Send> AsyncMysqlShim<W> for MySQL {
         let r: Result<Vec<(u32, String)>, mysql_async::Error> = self.connection.query(command_select_db.as_str()).await;
         return match r {
             Ok(_) => {
-                writer.ok()?;
-                Ok(())
+                Ok(writer.ok().await?)
             }
             Err(e) => {
                 Err(e.into())

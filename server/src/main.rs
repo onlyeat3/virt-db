@@ -56,17 +56,19 @@ fn init_logger(dev: u8) {
     // };
 }
 
-// #[tokio::main]
-// async fn main() -> Result<(), Box<dyn Error>> {
-//     enable_metrics();
-//     let cli = Cli::parse();
-//     init_logger(cli.dev);
-//     start().await
-// }
-
-fn main(){
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     enable_metrics();
+    let cli = Cli::parse();
+    init_logger(cli.dev);
+    let r = start();
+    println!("MySQL Server Proxy Started.");
+    return r.await;
 }
+
+// fn main(){
+//     enable_metrics();
+// }
 
 use metrics::{
     decrement_gauge, describe_counter, describe_histogram, gauge, histogram, increment_counter,
@@ -82,7 +84,7 @@ pub fn enable_metrics(){
     // tracing_subscriber::fmt::init();
 
     let builder = PrometheusBuilder::new();
-    let addr = SocketAddrV4::new(Ipv4Addr::new(127,0,0,1),9090);
+    let addr = SocketAddrV4::new(Ipv4Addr::new(127,0,0,1),19091);
     builder
         .with_http_listener(addr)
         .idle_timeout(
@@ -104,31 +106,31 @@ pub fn enable_metrics(){
         "The time taken for iterations of the TCP server event loop."
     );
 
-    let clock = Clock::new();
-    let mut last = None;
+    // let clock = Clock::new();
+    // let mut last = None;
 
     increment_counter!("idle_metric");
     gauge!("testing", 42.0);
 
     // Loop over and over, pretending to do some work.
-    loop {
-        increment_counter!("tcp_server_loops", "system" => "foo");
-
-        if let Some(t) = last {
-            let delta: Duration = clock.now() - t;
-            histogram!("tcp_server_loop_delta_secs", delta, "system" => "foo");
-        }
-
-        let increment_gauge = thread_rng().gen_bool(0.75);
-        if increment_gauge {
-            increment_gauge!("lucky_iterations", 1.0);
-        } else {
-            decrement_gauge!("lucky_iterations", 1.0);
-        }
-
-        last = Some(clock.now());
-
-        thread::sleep(Duration::from_millis(750));
-    }
+    // loop {
+    //     increment_counter!("tcp_server_loops", "system" => "foo");
+    //
+    //     if let Some(t) = last {
+    //         let delta: Duration = clock.now() - t;
+    //         histogram!("tcp_server_loop_delta_secs", delta, "system" => "foo");
+    //     }
+    //
+    //     let increment_gauge = thread_rng().gen_bool(0.75);
+    //     if increment_gauge {
+    //         increment_gauge!("lucky_iterations", 1.0);
+    //     } else {
+    //         decrement_gauge!("lucky_iterations", 1.0);
+    //     }
+    //
+    //     last = Some(clock.now());
+    //
+    //     thread::sleep(Duration::from_millis(750));
+    // }
 
 }

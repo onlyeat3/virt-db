@@ -9,9 +9,10 @@ use tokio::net::TcpListener;
 
 
 pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind("127.0.0.1:3307").await?;
+    let listener = TcpListener::bind("0.0.0.0:3307").await?;
     loop{
         let (stream, _) = listener.accept().await?;
+        let (r, w) = stream.into_split();
         tokio::spawn(async move {
             //TODO pool
             let url = "mysql://root:root@127.0.0.1:3306";
@@ -19,7 +20,7 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
             let client = redis::Client::open("redis://127.0.0.1/").unwrap();
             let redis_conn = client.get_async_connection().await.unwrap();
 
-            let r = AsyncMysqlIntermediary::run_on(MySQL::new( real_mysql_conn,redis_conn), stream).await;
+            let r = AsyncMysqlIntermediary::run_on(MySQL::new( real_mysql_conn,redis_conn), r, w).await;
             info!("mysql end result:{:?}",r);
         });
     }

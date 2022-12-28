@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "opensrv-mysql",
     "server",
     "admin/app", "admin/bin", "admin/configs", "admin/db", "admin/migration"
 ]
