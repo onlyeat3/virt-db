@@ -3,8 +3,10 @@ extern crate slab;
 use std::{io, net, result, thread};
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
 
 use log::{debug, error, info, trace};
+use metrics::histogram;
 use mysql_async::{Conn, Error, from_row_opt, from_value, from_value_opt, QueryResult, Row, TextProtocol, Value};
 use mysql_async::consts::ColumnType;
 use mysql_async::prelude::Queryable;
@@ -69,6 +71,7 @@ use tokio::io::AsyncWrite;
 struct Prepared {
     stmt: mysql_async::Statement,
     params: Vec<Column>,
+    sql: String,
 }
 
 #[derive(Debug)]
@@ -116,6 +119,70 @@ impl From<mysql_async::Error> for VirtDBMySQLError {
     }
 }
 
+impl MySQL {
+    pub async fn execute_query(&mut self, sql:&str) ->Result<MySQLResult,VirtDBMySQLError>{
+        // let r = self.connection.query(query);
+        trace!("sql:{}", sql);
+        let redis_key = format!("cache:{:?}", sql);
+        let ast_opt:Result<Vec<Statement>,ParserError> = Parser::parse_sql(&self.dialect, sql);
+        if let Ok(asts) = ast_opt {
+            for ast in asts {
+                trace!("ast:{:?}", ast);
+                if let Statement::Query(boxed_query) = ast {
+                    let query = boxed_query.as_ref();
+                    trace!("ast query:{:?}", query);
+                    if let SetExpr::Select(_select_expr_box) = &query.body {
+                        // let select_expr = select_expr_box.as_ref();
+                        // for table in &select_expr.from {
+                        //     info!("table:{:?}", table);
+                        // }
+                        let cached_value_result: Result<String, RedisError> =
+                            self.redis_conn.get(redis_key.clone()).await;
+                        if let Ok(redis_v) = cached_value_result {
+                            let mysql_result: MySQLResult = serde_json::from_str(&*redis_v).unwrap();
+                            trace!("decoded_v:{:?}",mysql_result);
+                            return Ok(mysql_result);
+                        }
+                    }
+                    trace!("ast query body:{:?}", query.body);
+                }
+            }
+        }
+
+        // let query_result_result: Result<QueryResult<TextProtocol>, Error> =
+        //     self.connection.query_iter(String::from(sql)).await;
+
+        let mut query_result: QueryResult<TextProtocol> = self.connection.query_iter(String::from(sql)).await?;
+        trace!("v:{:?}", query_result);
+        // let mysql_result_opt = handle_mysql_result(query_result_result).await;
+        trace!("columns:{:?}", query_result.columns());
+        let mut cols: Vec<Column> = vec![];
+        for arc_col in query_result.columns() {
+            cols = arc_col.iter()
+                .map(|mut c| {
+                    let t = c.column_type();
+                    let rc = Column {
+                        table: String::from(c.schema_str().to_owned()),
+                        column: String::from(c.name_str().to_owned()),
+                        coltype: t,
+                        colflags: c.flags(),
+                    };
+                    return rc;
+                })
+                .collect();
+        }
+
+        let rows = query_result.collect::<Row>().await?;
+        let mysql_result = MySQLResult { cols, rows };
+        // let rows: Vec<Row> = query_result.flatten().collect();
+        let json_v = serde_json::to_string(&mysql_result)
+            .unwrap_or_default();
+        trace!("json_v:{}",json_v);
+        let rv: RedisResult<Vec<Vec<u8>>> = self.redis_conn.set_ex(redis_key.clone(), json_v.as_str(), 60).await;
+        Ok(mysql_result)
+    }
+}
+
 #[async_trait::async_trait]
 impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
     type Error = VirtDBMySQLError;
@@ -125,7 +192,8 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
     }
 
     async fn on_prepare<'a>(&'a mut self, query: &'a str, info: StatementMetaWriter<'a, W>) -> Result<(), Self::Error> {
-        match self.connection.prep(query).await {
+        let startTime = SystemTime::now();
+        let r = match self.connection.prep(query).await {
             Ok(stmt) => {
                 use std::mem;
                 let params: Vec<_> = stmt
@@ -157,7 +225,7 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
 
                 // keep track of the parameter types so we can decode the values provided by the
                 // client when they later execute this statement.
-                let stmt = Prepared { stmt, params };
+                let stmt = Prepared { stmt, params, sql: String::from(query.clone()) };
 
                 // the statement is tied to the connection, which as far as the compiler is aware
                 // we only know lives for as long as the `&mut self` given to this function.
@@ -168,38 +236,46 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
 
                 let id = self.prepared.insert(stmt);
                 let stmt = &self.prepared[id];
-                info.reply(id as u32, &stmt.params, &columns).await;
+                info.reply(id as u32, &stmt.params, &columns).await?;
                 Ok(())
             }
 
             Err(e) => {
                 Err(e.into())
             }
-        }
+        };
+        let duration = SystemTime::now().duration_since(startTime).unwrap().as_millis();
+        histogram!("sql_duration", duration as f64, "sql" => String::from(query.clone()));
+
+        return r;
     }
 
     async fn on_execute<'a>(&'a mut self, id: u32, params: ParamParser<'a>, results: QueryResultWriter<'a, W>) -> Result<(), Self::Error> {
-         let r = match self.prepared.get_mut(id as usize) {
-            None => results.error(ErrorKind::ER_NO, b"no such prepared statement"),
-            Some(&mut Prepared { ref mut stmt, .. }) => {
-                // let args = ps.into_iter()
-                //     .map(|p|{
-                //         p.coltype
-                //     })
-                //     .collect();
-                // self.connection.query(stmt, &args[..])
-                // let types = ps.into_iter()
-                //     .map(|f| {
-                //         f.coltype
-                //     })
-                //     .collect();
-                // String::from("");
-                // self.connection.query();
-                // results.completed(OkResponse::default()).await
-                results.error(ErrorKind::ER_NO, b"no such prepared statement")
-            }
-        }.await;
-        Ok(r?)
+        // let start_time = SystemTime::now();
+        // let r = match self.prepared.get_mut(id as usize) {
+        //     None => results.error(ErrorKind::ER_NO, b"no such prepared statement").await?,
+        //     Some(&mut Prepared { ref mut stmt, ref mut params, ref mut sql }) => {
+        //         // let args = params.into_iter()
+        //         //     .map(|p|{
+        //         //         p.coltype
+        //         //     })
+        //         //     .collect();
+        //         // let r = self.connection.exec(stmt, params).await;
+        //         // let types = params.into_iter()
+        //         //     .map(|f| {
+        //         //         f.coltype
+        //         //     })
+        //         //     .collect();
+        //         // results.completed(OkResponse::default()).await?;
+        //         let err_result = results.error(ErrorKind::ER_NO, b"no such prepared statement").await?;
+        //
+        //         let duration = SystemTime::now().duration_since(start_time).unwrap().as_millis();
+        //         histogram!("sql_duration", duration as f64, "sql" => String::from(sql.clone()));
+        //         return err_result;
+        //     }
+        // }.await;
+        let r = results.error(ErrorKind::ER_NO, b"Not Support").await?;
+        return Ok(r);
     }
 
     async fn on_close(&mut self, id: u32) {
@@ -208,92 +284,10 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
     }
 
     async fn on_query<'a>(&'a mut self, sql: &'a str, results: QueryResultWriter<'a, W>) -> Result<(), Self::Error> {
-        // let r = self.connection.query(query);
-        trace!("sql:{}", sql);
-        let redis_key = format!("cache:{:?}", sql);
-        let ast_opt = Parser::parse_sql(&self.dialect, sql);
-        if let Ok(asts) = ast_opt {
-            for ast in asts {
-                trace!("ast:{:?}", ast);
-                if let Statement::Query(boxed_query) = ast {
-                    let query = boxed_query.as_ref();
-                    trace!("ast query:{:?}", query);
-                    if let SetExpr::Select(_select_expr_box) = &query.body {
-                        // let select_expr = select_expr_box.as_ref();
-                        // for table in &select_expr.from {
-                        //     info!("table:{:?}", table);
-                        // }
-                        let cached_value_result: Result<String, RedisError> =
-                            self.redis_conn.get(redis_key.clone()).await;
-                        if let Ok(redis_v)= cached_value_result{
-                            let mysql_result:MySQLResult = serde_json::from_str(&*redis_v).unwrap();
-                            trace!("decoded_v:{:?}",mysql_result);
-                            let mut writer = results.start(&mysql_result.cols).await?;
-                            for row in mysql_result.rows {
-                                trace!("row:{:?}", row);
-                                for col in &mysql_result.cols {
-                                    trace!("col:{:?}", col);
-                                    let column_value = &row[col.column.as_ref()];
-                                    trace!("blob column_value:{:?}", column_value);
-                                    writer.write_col(column_value)?;
-                                }
-                                writer.end_row().await?;
-                            }
-                            return Ok(writer.finish().await?)
-                        }
-                    }
-                    trace!("ast query body:{:?}", query.body);
-                }
-            }
-        }
-
-        let query_result_result: Result<QueryResult<TextProtocol>, mysql_async::Error> =
-            self.connection.query_iter(String::from(sql)).await;
-        trace!("v:{:?}", query_result_result);
-        // let mysql_result_opt = handle_mysql_result(query_result_result).await;
-        let mysql_result_opt = match query_result_result {
-            Ok(mut query_result) => {
-                trace!("columns:{:?}", query_result.columns());
-                let mut cols: Vec<Column> = vec![];
-                for arc_col in query_result.columns() {
-                    cols = arc_col.iter()
-                        .map(|c| {
-                            let t = c.column_type();
-                            let rc = Column {
-                                table: String::from(c.schema_str().to_owned()),
-                                column: String::from(c.name_str().to_owned()),
-                                coltype: t,
-                                colflags: c.flags(),
-                            };
-                            return rc;
-                        })
-                        .collect();
-                }
-
-                let rows_result = query_result.collect::<Row>().await;
-                match rows_result {
-                    Ok(rows) => {
-                        let mysql_result = MySQLResult { cols, rows };
-                        Ok(mysql_result)
-                    }
-                    Err(err) => {
-                        error!("get mysql err:{:?}", err);
-                        Err(err)
-                    }
-                }
-                // let rows: Vec<Row> = query_result.flatten().collect();
-            }
-            Err(err) => {
-                error!("get mysql err:{:?}", err);
-                Err(err.into())
-            }
-        };
-        match mysql_result_opt {
+        let start_time = SystemTime::now();
+        let mysql_result_wrapper = self.execute_query(sql).await;
+        return match mysql_result_wrapper {
             Ok(mysql_result) => {
-                let json_v = serde_json::to_string(&mysql_result)
-                    .unwrap_or_default();
-                trace!("json_v:{}",json_v);
-                let rv:RedisResult<Vec<Vec<u8>>> = self.redis_conn.set(redis_key.clone(),json_v.as_str()).await;
                 let mut writer = results.start(&mysql_result.cols).await?;
                 for row in mysql_result.rows {
                     trace!("row:{:?}", row);
@@ -305,12 +299,41 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
                     }
                     writer.end_row().await?;
                 }
+
+                let duration = SystemTime::now().duration_since(start_time).unwrap().as_millis();
+                histogram!("sql_duration", duration as f64, "sql" => String::from(sql.clone()));
                 Ok(writer.finish().await?)
-            }
-            Err(err) => {
-                Ok(results.error(ErrorKind::ER_NO, err.to_string().as_bytes()).await?)
+            },
+            Err(mut e) => {
+                match e {
+                    VirtDBMySQLError::MySQL_ASYNC(mysql_async_err) => {
+                        match mysql_async_err {
+                            Error::Driver(e) => {
+                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
+                            }
+                            Error::Io(e) => {
+                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
+                            }
+                            Error::Other(e) => {
+                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
+                            }
+                            Error::Server(err) => {
+                                results.error(ErrorKind::from(err.code), err.message.as_bytes()).await?
+                            }
+                            Error::Url(e) => {
+                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
+                            }
+                        };
+                        Ok(())
+                    }
+                    VirtDBMySQLError::Io(err) => {
+                        results.error(ErrorKind::ER_YES, err.to_string().as_bytes()).await?;
+                        return Ok(());
+                    }
+                }
             }
         }
+
     }
 
     async fn on_init<'a>(&'a mut self, schema: &'a str, writer: InitWriter<'a, W>) -> Result<(), Self::Error> {
