@@ -21,7 +21,8 @@ pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
             let redis_conn = client.get_async_connection().await.unwrap();
 
             let r = AsyncMysqlIntermediary::run_on(MySQL::new( real_mysql_conn,redis_conn), r, w).await;
-            info!("mysql end result:{:?}",r);
+            trace!("mysql end result:{:?}",r);
+            return r;
         });
     }
 }

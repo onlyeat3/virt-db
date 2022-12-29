@@ -59,10 +59,11 @@ fn init_logger(dev: u8) {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     enable_metrics();
+
     let cli = Cli::parse();
     init_logger(cli.dev);
     let r = start();
-    println!("MySQL Server Proxy Started.");
+    info!("MySQL Server Proxy Started.");
     return r.await;
 }
 
@@ -100,17 +101,17 @@ pub fn enable_metrics(){
     //
     // Registering metrics ahead of using them is not required, but is the only way to specify the
     // description of a metric.
-    describe_counter!("tcp_server_loops", "The iterations of the TCP server event loop so far.");
-    describe_histogram!(
-        "tcp_server_loop_delta_secs",
-        "The time taken for iterations of the TCP server event loop."
-    );
+    // describe_counter!("tcp_server_loops", "The iterations of the TCP server event loop so far.");
+    // describe_histogram!(
+    //     "tcp_server_loop_delta_secs",
+    //     "The time taken for iterations of the TCP server event loop."
+    // );
 
     // let clock = Clock::new();
     // let mut last = None;
 
-    increment_counter!("idle_metric");
-    gauge!("testing", 42.0);
+    // increment_counter!("idle_metric");
+    // gauge!("testing", 42.0);
 
     // Loop over and over, pretending to do some work.
     // loop {
