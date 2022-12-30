@@ -119,6 +119,19 @@ impl From<mysql_async::Error> for VirtDBMySQLError {
     }
 }
 
+impl VirtDBMySQLError {
+    pub fn to_string(self) -> String {
+        return match self {
+            VirtDBMySQLError::MySQL_ASYNC(mysql_async_err) => {
+                mysql_async_err.to_string()
+            }
+            VirtDBMySQLError::Io(err) => {
+                err.to_string()
+            }
+        }
+    }
+}
+
 impl MySQL {
     pub async fn execute_query(&mut self, sql:&str) ->Result<MySQLResult,VirtDBMySQLError>{
         // let r = self.connection.query(query);
@@ -305,32 +318,8 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
                 Ok(writer.finish().await?)
             },
             Err(mut e) => {
-                match e {
-                    VirtDBMySQLError::MySQL_ASYNC(mysql_async_err) => {
-                        match mysql_async_err {
-                            Error::Driver(e) => {
-                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
-                            }
-                            Error::Io(e) => {
-                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
-                            }
-                            Error::Other(e) => {
-                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
-                            }
-                            Error::Server(err) => {
-                                results.error(ErrorKind::from(err.code), err.message.as_bytes()).await?
-                            }
-                            Error::Url(e) => {
-                                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?
-                            }
-                        };
-                        Ok(())
-                    }
-                    VirtDBMySQLError::Io(err) => {
-                        results.error(ErrorKind::ER_YES, err.to_string().as_bytes()).await?;
-                        return Ok(());
-                    }
-                }
+                results.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?;
+                Ok(())
             }
         }
 
@@ -339,14 +328,16 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
     async fn on_init<'a>(&'a mut self, schema: &'a str, writer: InitWriter<'a, W>) -> Result<(), Self::Error> {
         debug!("schema:{}", schema);
         // self.connection.select_db(schema);
-        let command_select_db = format!("use {schema}");
-        let r: Result<Vec<(u32, String)>, mysql_async::Error> = self.connection.query(command_select_db.as_str()).await;
+        let command_select_db_string = format!("use `{schema}`");
+        let command_select_db_str = command_select_db_string.as_str();
+        let r: Result<Vec<(u32, String)>, mysql_async::Error> = self.connection.query(command_select_db_str).await;
         return match r {
             Ok(_) => {
                 Ok(writer.ok().await?)
             }
             Err(e) => {
-                Err(e.into())
+                writer.error(ErrorKind::ER_YES, e.to_string().as_bytes()).await?;
+                Ok(())
             }
         };
     }
