@@ -1,34 +1,24 @@
 extern crate slab;
 
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::mem::{replace, take};
-use std::ptr::null;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use std::{io, net, ptr, result, thread};
+use std::time::{SystemTime};
+use std::{io};
 
 use log::{debug, error, info, trace};
 use metrics::histogram;
-use mysql_async::consts::ColumnType;
 use mysql_async::prelude::Queryable;
 use mysql_async::{
-    from_row_opt, from_value, from_value_opt, Conn, Error, QueryResult, Row, TextProtocol, Value,
+    Conn, Error, QueryResult, Row, TextProtocol,
 };
-use mysql_common::frunk::labelled::chars::_0;
-use nom::combinator::iterator;
 use redis::aio::Connection;
-use redis::{AsyncCommands, Commands, RedisError, RedisResult};
-use serde::ser::{SerializeSeq, SerializeStruct};
-use serde::{Deserialize, Serialize, Serializer};
+use redis::{AsyncCommands, RedisError, RedisResult};
 use slab::Slab;
 use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::{Parser, ParserError};
 
 use opensrv_mysql::{
-    AsyncMysqlIntermediary, AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, OkResponse,
+    AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter,
     ParamParser, QueryResultWriter, StatementMetaWriter,
 };
 use tokio::io::AsyncWrite;
@@ -195,7 +185,7 @@ impl MySQL {
                         // for table in &select_expr.from {
                         //     info!("table:{:?}", table);
                         // }
-                        let mut redis_conn = self.get_redis_connection().await?;
+                        let redis_conn = self.get_redis_connection().await?;
                         let cached_value_result: Result<String, RedisError> =
                             redis_conn.get(redis_key.clone()).await;
                         if let Ok(redis_v) = cached_value_result {
@@ -212,7 +202,7 @@ impl MySQL {
 
         // let query_result_result: Result<QueryResult<TextProtocol>, Error> =
         //     self.connection.query_iter(String::from(sql)).await;
-        let mut mysql_conn = self.get_mysql_connection().await?;
+        let mysql_conn = self.get_mysql_connection().await?;
         let mut query_result: QueryResult<TextProtocol> =
             mysql_conn.query_iter(String::from(sql)).await?;
         trace!("v:{:?}", query_result);
@@ -222,7 +212,7 @@ impl MySQL {
         for arc_col in query_result.columns() {
             cols = arc_col
                 .iter()
-                .map(|mut c| {
+                .map(|c| {
                     let t = c.column_type();
                     let rc = Column {
                         table: String::from(c.schema_str().to_owned()),
@@ -283,7 +273,6 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
                     .columns()
                     .into_iter()
                     .map(|c| {
-                        let t = c.column_type();
                         Column {
                             table: String::from(c.schema_str().to_owned()),
                             column: String::from(c.name_str().to_owned()),

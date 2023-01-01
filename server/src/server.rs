@@ -1,9 +1,6 @@
-use std::error::Error;
-use std::io;
 
-use crate::mysql_protocol::{MySQL, VirtDBMySQLError};
-use log::{debug, error, info, trace};
-use mysql_async::{Conn, OptsBuilder};
+use crate::mysql_protocol::{MySQL};
+use log::{error};
 use opensrv_mysql::*;
 use tokio::net::TcpListener;
 

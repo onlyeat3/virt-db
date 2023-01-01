@@ -1,30 +1,20 @@
 extern crate slab;
 
-use std::borrow::Borrow;
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::{fmt, io, net, result, thread};
+use std::{fmt};
 
 use log::{debug, info, trace};
 use mysql_async::{
-    from_row_opt, from_value, from_value_opt, Conn, QueryResult, Row, TextProtocol, Value,
+    Value,
 };
 use mysql_common::constants::{ColumnFlags, ColumnType};
-use mysql_common::misc::raw::int::{LeU16, LeU32};
-use mysql_common::misc::raw::{Const, RawInt, Skip};
 use mysql_common::packets as mycp;
-use mysql_common::packets::{ColumnDefinitionCatalog, FixedLengthFieldsLen};
 use mysql_common::proto::MySerialize;
 use mysql_common::row::new_row;
 use opensrv_mysql::Column;
-use redis::{Commands, RedisError};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{Serialize, Serializer};
-use slab::Slab;
-use sqlparser::ast::{SetExpr, Statement};
-use sqlparser::dialect::MySqlDialect;
-use sqlparser::parser::{Parser, ParserError};
 
 use crate::mysql_protocol::MySQLResult;
 
