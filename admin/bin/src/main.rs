@@ -8,6 +8,7 @@ use app::{
 };
 use configs::CFG;
 //
+use poem::listener::RustlsCertificate;
 use poem::{
     endpoint::StaticFilesEndpoint,
     listener::{Listener, RustlsConfig, TcpListener},
@@ -17,7 +18,6 @@ use poem::{
     },
     EndpointExt, Result, Route, Server,
 };
-use poem::listener::RustlsCertificate;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 
 // 路由日志追踪

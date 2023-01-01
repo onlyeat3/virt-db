@@ -18,10 +18,10 @@ use crate::server::start;
 
 // use crate::server::start;
 
-mod server;
-mod mysql_protocol;
 mod conv;
+mod mysql_protocol;
 mod serde;
+mod server;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -81,11 +81,11 @@ use metrics_util::MetricKindMask;
 use quanta::Clock;
 use rand::{thread_rng, Rng};
 
-pub fn enable_metrics(){
+pub fn enable_metrics() {
     // tracing_subscriber::fmt::init();
 
     let builder = PrometheusBuilder::new();
-    let addr = SocketAddrV4::new(Ipv4Addr::new(127,0,0,1),19091);
+    let addr = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 19091);
     builder
         .with_http_listener(addr)
         .idle_timeout(
@@ -133,5 +133,4 @@ pub fn enable_metrics(){
     //
     //     thread::sleep(Duration::from_millis(750));
     // }
-
 }

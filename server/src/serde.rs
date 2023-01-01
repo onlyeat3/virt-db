@@ -1,36 +1,36 @@
 extern crate slab;
 
-use std::{fmt, io, net, result, thread};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::{fmt, io, net, result, thread};
 
 use log::{debug, info, trace};
 use mysql_async::{
-    Conn, from_row_opt, from_value, from_value_opt, QueryResult, Row, TextProtocol, Value,
+    from_row_opt, from_value, from_value_opt, Conn, QueryResult, Row, TextProtocol, Value,
 };
 use mysql_common::constants::{ColumnFlags, ColumnType};
-use mysql_common::misc::raw::{Const, RawInt, Skip};
 use mysql_common::misc::raw::int::{LeU16, LeU32};
+use mysql_common::misc::raw::{Const, RawInt, Skip};
 use mysql_common::packets as mycp;
 use mysql_common::packets::{ColumnDefinitionCatalog, FixedLengthFieldsLen};
 use mysql_common::proto::MySerialize;
 use mysql_common::row::new_row;
+use opensrv_mysql::Column;
 use redis::{Commands, RedisError};
-use serde::{Serialize, Serializer};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeSeq, SerializeStruct};
+use serde::{Serialize, Serializer};
 use slab::Slab;
 use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::{Parser, ParserError};
-use opensrv_mysql::Column;
 
 use crate::mysql_protocol::MySQLResult;
 
-#[derive(Serialize,serde::Deserialize,Debug)]
-#[serde(remote="Value")]
-pub enum ValueRef{
+#[derive(Serialize, serde::Deserialize, Debug)]
+#[serde(remote = "Value")]
+pub enum ValueRef {
     NULL,
     Bytes(Vec<u8>),
     Int(i64),
@@ -43,18 +43,17 @@ pub enum ValueRef{
     Time(bool, u32, u8, u8, u8, u32),
 }
 
-#[derive(Serialize,serde::Deserialize,Debug)]
-pub struct ValueWrapper{
-    #[serde(with="ValueRef")]
-    pub v:Value,
+#[derive(Serialize, serde::Deserialize, Debug)]
+pub struct ValueWrapper {
+    #[serde(with = "ValueRef")]
+    pub v: Value,
 }
 
-#[derive(Serialize,serde::Deserialize,Debug)]
-pub struct RowWrapper{
+#[derive(Serialize, serde::Deserialize, Debug)]
+pub struct RowWrapper {
     values: Vec<Option<ValueWrapper>>,
     // columns: Arc<[ColumnRef]>,
 }
-
 
 #[derive(Debug, serde::Deserialize)]
 enum ColumnTypeRef {
@@ -137,8 +136,8 @@ impl ColumnTypeRef {
 
 impl Serialize for ColumnTypeRef {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         serializer.serialize_str(&*format!("{:?}", self))
     }
@@ -153,8 +152,8 @@ struct ColumnRef {
 }
 
 impl ColumnRef {
-    pub fn from_column(col:Column) -> ColumnRef {
-        return ColumnRef{
+    pub fn from_column(col: Column) -> ColumnRef {
+        return ColumnRef {
             table: col.table,
             column: col.column,
             coltype: col.coltype,
@@ -166,8 +165,8 @@ impl ColumnRef {
 // This is what #[derive(Serialize)] would generate.
 impl Serialize for ColumnRef {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         let mut s = serializer.serialize_struct("Person", 3)?;
         s.serialize_field("table", &self.table)?;
@@ -180,8 +179,8 @@ impl Serialize for ColumnRef {
 
 impl<'de> Deserialize<'de> for ColumnRef {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         enum Field {
             TABLE,
@@ -197,8 +196,8 @@ impl<'de> Deserialize<'de> for ColumnRef {
         //    enum Field { Secs, Nanos }
         impl<'de> Deserialize<'de> for Field {
             fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
-                where
-                    D: Deserializer<'de>,
+            where
+                D: Deserializer<'de>,
             {
                 struct FieldVisitor;
 
@@ -210,8 +209,8 @@ impl<'de> Deserialize<'de> for ColumnRef {
                     }
 
                     fn visit_str<E>(self, value: &str) -> Result<Field, E>
-                        where
-                            E: de::Error,
+                    where
+                        E: de::Error,
                     {
                         match value {
                             "table" => Ok(Field::TABLE),
@@ -248,8 +247,8 @@ impl<'de> Deserialize<'de> for ColumnRef {
             // }
 
             fn visit_map<V>(self, mut map: V) -> Result<ColumnRef, V::Error>
-                where
-                    V: MapAccess<'de>,
+            where
+                V: MapAccess<'de>,
             {
                 let mut table = String::from("");
                 let mut column = String::from("");
@@ -265,7 +264,7 @@ impl<'de> Deserialize<'de> for ColumnRef {
                         }
                         Field::COLTYPE => {
                             let col_type_ref: ColumnTypeRef = map.next_value()?;
-                            trace!("[visit_map]col_type_ref:{:?}",col_type_ref);
+                            trace!("[visit_map]col_type_ref:{:?}", col_type_ref);
                             coltype = match col_type_ref {
                                 ColumnTypeRef::MYSQL_TYPE_DECIMAL => ColumnType::MYSQL_TYPE_DECIMAL,
                                 ColumnTypeRef::MYSQL_TYPE_TINY => ColumnType::MYSQL_TYPE_TINY,
@@ -274,32 +273,56 @@ impl<'de> Deserialize<'de> for ColumnRef {
                                 ColumnTypeRef::MYSQL_TYPE_FLOAT => ColumnType::MYSQL_TYPE_FLOAT,
                                 ColumnTypeRef::MYSQL_TYPE_DOUBLE => ColumnType::MYSQL_TYPE_DOUBLE,
                                 ColumnTypeRef::MYSQL_TYPE_NULL => ColumnType::MYSQL_TYPE_NULL,
-                                ColumnTypeRef::MYSQL_TYPE_TIMESTAMP => ColumnType::MYSQL_TYPE_TIMESTAMP,
-                                ColumnTypeRef::MYSQL_TYPE_LONGLONG => ColumnType::MYSQL_TYPE_LONGLONG,
+                                ColumnTypeRef::MYSQL_TYPE_TIMESTAMP => {
+                                    ColumnType::MYSQL_TYPE_TIMESTAMP
+                                }
+                                ColumnTypeRef::MYSQL_TYPE_LONGLONG => {
+                                    ColumnType::MYSQL_TYPE_LONGLONG
+                                }
                                 ColumnTypeRef::MYSQL_TYPE_INT24 => ColumnType::MYSQL_TYPE_INT24,
                                 ColumnTypeRef::MYSQL_TYPE_DATE => ColumnType::MYSQL_TYPE_DATE,
                                 ColumnTypeRef::MYSQL_TYPE_TIME => ColumnType::MYSQL_TYPE_TIME,
-                                ColumnTypeRef::MYSQL_TYPE_DATETIME => ColumnType::MYSQL_TYPE_DATETIME,
+                                ColumnTypeRef::MYSQL_TYPE_DATETIME => {
+                                    ColumnType::MYSQL_TYPE_DATETIME
+                                }
                                 ColumnTypeRef::MYSQL_TYPE_YEAR => ColumnType::MYSQL_TYPE_YEAR,
                                 ColumnTypeRef::MYSQL_TYPE_NEWDATE => ColumnType::MYSQL_TYPE_NEWDATE,
                                 ColumnTypeRef::MYSQL_TYPE_VARCHAR => ColumnType::MYSQL_TYPE_VARCHAR,
                                 ColumnTypeRef::MYSQL_TYPE_BIT => ColumnType::MYSQL_TYPE_BIT,
-                                ColumnTypeRef::MYSQL_TYPE_TIMESTAMP2 => ColumnType::MYSQL_TYPE_TIMESTAMP2,
-                                ColumnTypeRef::MYSQL_TYPE_DATETIME2 => ColumnType::MYSQL_TYPE_DATETIME2,
+                                ColumnTypeRef::MYSQL_TYPE_TIMESTAMP2 => {
+                                    ColumnType::MYSQL_TYPE_TIMESTAMP2
+                                }
+                                ColumnTypeRef::MYSQL_TYPE_DATETIME2 => {
+                                    ColumnType::MYSQL_TYPE_DATETIME2
+                                }
                                 ColumnTypeRef::MYSQL_TYPE_TIME2 => ColumnType::MYSQL_TYPE_TIME2,
-                                ColumnTypeRef::MYSQL_TYPE_TYPED_ARRAY => ColumnType::MYSQL_TYPE_TYPED_ARRAY,
+                                ColumnTypeRef::MYSQL_TYPE_TYPED_ARRAY => {
+                                    ColumnType::MYSQL_TYPE_TYPED_ARRAY
+                                }
                                 ColumnTypeRef::MYSQL_TYPE_UNKNOWN => ColumnType::MYSQL_TYPE_UNKNOWN,
                                 ColumnTypeRef::MYSQL_TYPE_JSON => ColumnType::MYSQL_TYPE_JSON,
-                                ColumnTypeRef::MYSQL_TYPE_NEWDECIMAL => ColumnType::MYSQL_TYPE_NEWDECIMAL,
+                                ColumnTypeRef::MYSQL_TYPE_NEWDECIMAL => {
+                                    ColumnType::MYSQL_TYPE_NEWDECIMAL
+                                }
                                 ColumnTypeRef::MYSQL_TYPE_ENUM => ColumnType::MYSQL_TYPE_ENUM,
                                 ColumnTypeRef::MYSQL_TYPE_SET => ColumnType::MYSQL_TYPE_SET,
-                                ColumnTypeRef::MYSQL_TYPE_TINY_BLOB => ColumnType::MYSQL_TYPE_TINY_BLOB,
-                                ColumnTypeRef::MYSQL_TYPE_MEDIUM_BLOB => ColumnType::MYSQL_TYPE_MEDIUM_BLOB,
-                                ColumnTypeRef::MYSQL_TYPE_LONG_BLOB => ColumnType::MYSQL_TYPE_LONG_BLOB,
+                                ColumnTypeRef::MYSQL_TYPE_TINY_BLOB => {
+                                    ColumnType::MYSQL_TYPE_TINY_BLOB
+                                }
+                                ColumnTypeRef::MYSQL_TYPE_MEDIUM_BLOB => {
+                                    ColumnType::MYSQL_TYPE_MEDIUM_BLOB
+                                }
+                                ColumnTypeRef::MYSQL_TYPE_LONG_BLOB => {
+                                    ColumnType::MYSQL_TYPE_LONG_BLOB
+                                }
                                 ColumnTypeRef::MYSQL_TYPE_BLOB => ColumnType::MYSQL_TYPE_BLOB,
-                                ColumnTypeRef::MYSQL_TYPE_VAR_STRING => ColumnType::MYSQL_TYPE_VAR_STRING,
+                                ColumnTypeRef::MYSQL_TYPE_VAR_STRING => {
+                                    ColumnType::MYSQL_TYPE_VAR_STRING
+                                }
                                 ColumnTypeRef::MYSQL_TYPE_STRING => ColumnType::MYSQL_TYPE_STRING,
-                                ColumnTypeRef::MYSQL_TYPE_GEOMETRY => ColumnType::MYSQL_TYPE_GEOMETRY,
+                                ColumnTypeRef::MYSQL_TYPE_GEOMETRY => {
+                                    ColumnType::MYSQL_TYPE_GEOMETRY
+                                }
                             };
                         }
                         Field::COLFLAGS => {
@@ -342,8 +365,8 @@ impl<'de> Deserialize<'de> for ColumnRef {
 
 impl Serialize for MySQLResult {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         let mut rows_v: Vec<RowWrapper> = vec![];
         for row in &self.rows {
@@ -351,16 +374,14 @@ impl Serialize for MySQLResult {
             for col in &self.cols {
                 // trace!("col:{:?}", col);
                 let column_value = &row[col.column.as_ref()];
-                let v = ValueWrapper{
+                let v = ValueWrapper {
                     v: column_value.clone(),
                 };
                 // let col_json_v = serde_json::to_string(&v)?;
                 // trace!("col_json_v:{:?}",col_json_v);
                 row_v.push(Some(v));
             }
-            let row_wrapper = RowWrapper{
-                values: row_v,
-            };
+            let row_wrapper = RowWrapper { values: row_v };
             rows_v.push(row_wrapper);
         }
         let cols_v: Vec<ColumnRef> = self
@@ -383,8 +404,8 @@ impl Serialize for MySQLResult {
 
 impl<'de> Deserialize<'de> for MySQLResult {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         #[derive(Debug)]
         enum Field {
@@ -394,8 +415,8 @@ impl<'de> Deserialize<'de> for MySQLResult {
 
         impl<'de> Deserialize<'de> for Field {
             fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
-                where
-                    D: Deserializer<'de>,
+            where
+                D: Deserializer<'de>,
             {
                 struct FieldVisitor;
 
@@ -407,8 +428,8 @@ impl<'de> Deserialize<'de> for MySQLResult {
                     }
 
                     fn visit_str<E>(self, value: &str) -> Result<Field, E>
-                        where
-                            E: de::Error,
+                    where
+                        E: de::Error,
                     {
                         match value {
                             "cols" => Ok(Field::Cols),
@@ -446,15 +467,15 @@ impl<'de> Deserialize<'de> for MySQLResult {
             // }
 
             fn visit_map<V>(self, mut map: V) -> Result<MySQLResult, V::Error>
-                where
-                    V: MapAccess<'de>,
+            where
+                V: MapAccess<'de>,
             {
                 let mut cols = vec![];
                 let mut rows = vec![];
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Cols => {
-                            trace!("key:{:?}",key);
+                            trace!("key:{:?}", key);
                             let cols_refs: Vec<ColumnRef> = map.next_value()?;
                             for cr in cols_refs {
                                 cols.push(Column {
@@ -464,9 +485,9 @@ impl<'de> Deserialize<'de> for MySQLResult {
                                     colflags: cr.colflags,
                                 });
                             }
-                        },
+                        }
                         Field::Rows => {
-                            trace!("key:{:?}",key);
+                            trace!("key:{:?}", key);
                             let row: Vec<RowWrapper> = map.next_value().unwrap();
                             for row in row {
                                 let mut row_v = vec![];
@@ -475,7 +496,8 @@ impl<'de> Deserialize<'de> for MySQLResult {
                                 }
 
                                 // let col_slice = &cols[..];
-                                let mycp_cols: Vec<mycp::Column> = cols.iter()
+                                let mycp_cols: Vec<mycp::Column> = cols
+                                    .iter()
                                     .map(|col| {
                                         let r_col = mycp::Column::new(col.coltype)
                                             .with_table(col.table.as_ref())

@@ -13,7 +13,7 @@ pub static SYSINFO: Lazy<Arc<Mutex<Option<SysInfo>>>> = Lazy::new(|| {
     Arc::new(Mutex::new(None))
 });
 
-use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt, CpuExt};
+use sysinfo::{CpuExt, NetworkExt, NetworksExt, ProcessExt, System, SystemExt};
 //  获取基础信息
 async fn get_server_info() {
     loop {

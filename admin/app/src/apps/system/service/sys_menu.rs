@@ -4,10 +4,7 @@ use db::{
     common::res::{ListData, PageParams},
     db_conn,
     system::{
-        entities::{
-            prelude::{SysMenu},
-            sys_api_db, sys_menu, sys_role_api,
-        },
+        entities::{prelude::SysMenu, sys_api_db, sys_menu, sys_role_api},
         models::sys_menu::{AddReq, EditReq, LogCacheEditReq, MenuRelated, MenuResp, Meta, SearchReq, SysMenuTree, UserMenu},
     },
     DB,
