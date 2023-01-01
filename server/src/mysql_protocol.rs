@@ -1,6 +1,5 @@
 extern crate slab;
 
-use async_once_cell::OnceCell;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 use std::collections::HashMap;
