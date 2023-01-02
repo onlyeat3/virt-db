@@ -5,6 +5,7 @@ use metrics::{
 };
 use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::MetricKindMask;
+use crate::sys_config::VirtDBConfig;
 
 pub fn enable_metrics() {
     // tracing_subscriber::fmt::init();

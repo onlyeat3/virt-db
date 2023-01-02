@@ -1,0 +1,16 @@
+[server]
+dev = true
+port = 3307
+username = "root"
+password = "root"
+
+[mysql]
+ip="127.0.0.1"
+port=3306
+username="root"
+password="root"
+
+[redis]
+ip="127.0.0.1"
+port=6379
+requirepass="123456"

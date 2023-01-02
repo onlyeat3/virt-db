@@ -3816,10 +3816,12 @@ dependencies = [
  "rand 0.8.5",
  "redis",
  "serde",
+ "serde_derive",
  "serde_json",
  "slab",
  "sqlparser",
  "tokio 1.23.0",
+ "toml",
 ]
 
 [[package]]

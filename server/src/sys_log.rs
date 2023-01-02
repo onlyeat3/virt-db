@@ -1,7 +1,7 @@
 use chrono::Local;
 use std::io::Write;
 
-pub fn init_logger(dev: u8) {
+pub fn init_logger() {
     let env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info");
     env_logger::Builder::from_env(env)
         .format(|buf, record| {

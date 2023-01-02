@@ -92,7 +92,7 @@ pub struct MySQL {
 }
 
 impl MySQL {
-    pub fn new(mysql_url: &str, redis_url: &str) -> Self {
+    pub fn new(mysql_url: &str, redis_url: String) -> Self {
         MySQL {
             _mysql_url: mysql_url.to_string(),
             _redis_url: redis_url.to_string(),
