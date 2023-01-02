@@ -3,7 +3,7 @@ use std::thread::Thread;
 use std::error::Error;
 use std::time::{Duration, Instant};
 use chrono::DateTime;
-use tokio::spawn;
+use tokio::{spawn, time};
 use crate::sys_config::VirtDBConfig;
 use log::{info};
 use mysql_async::{Conn, Opts, QueryResult, TextProtocol};
@@ -62,7 +62,7 @@ pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
             // info!("cache_config_list:{:?}", get_cache_config_entity_list());
 
 
-            thread::sleep(Duration::from_secs(10));
+            time::sleep(Duration::from_secs(10)).await;
         }
     });
 }
