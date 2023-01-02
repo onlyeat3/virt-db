@@ -12,7 +12,7 @@ use sqlx::mysql::MySqlPoolOptions;
 
 static mut CACHE_CONFIG_ENTITY_LIST: Vec<CacheConfigEntity> = vec![];
 
-fn get_cache_config_entity_list() -> &'static Vec<CacheConfigEntity> {
+pub fn get_cache_config_entity_list() -> &'static Vec<CacheConfigEntity> {
     unsafe {
         &CACHE_CONFIG_ENTITY_LIST
     }
@@ -29,16 +29,16 @@ fn set_cache_config_entity_list(entity_list: Vec<CacheConfigEntity>) {
 
 #[derive(sqlx::FromRow, Debug)]
 pub struct CacheConfigEntity {
-    id: i32,
-    sql_template: String,
-    duration: i32,
-    cache_name: String,
-    remark: String,
-    enabled: i32,
-    // created_at: chrono::DateTime<chrono::Utc>,
-    // updated_at: chrono::DateTime<chrono::Utc>,
-    created_by: i64,
-    updated_by: i64,
+    pub id: i32,
+    pub sql_template: String,
+    pub duration: i32,
+    pub cache_name: String,
+    pub remark: String,
+    pub enabled: i32,
+    // pub created_at: chrono::DateTime<chrono::Utc>,
+    // pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: i64,
+    pub updated_by: i64,
 }
 
 pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
