@@ -14,3 +14,10 @@ password="root"
 ip="127.0.0.1"
 port=6379
 requirepass="123456"
+
+[meta_db]
+ip="127.0.0.1"
+port=3306
+username="root"
+password="root"
+database="virt-db-meta"

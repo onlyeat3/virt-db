@@ -3820,6 +3820,7 @@ dependencies = [
  "serde_json",
  "slab",
  "sqlparser",
+ "sqlx",
  "tokio 1.23.0",
  "toml",
 ]

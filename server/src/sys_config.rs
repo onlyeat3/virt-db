@@ -11,6 +11,7 @@ pub struct VirtDBConfig {
     pub server: ServerConfig,
     pub mysql: BackendMySQLServerConfig,
     pub redis: RedisServerConfig,
+    pub meta_db: MetaDbConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -44,6 +45,18 @@ pub struct RedisServerConfig {
     pub ip: String,
     pub port: i32,
     pub requirepass: String,
+}
+
+/**
+ * 服务的源数据
+ */
+#[derive(Debug, Deserialize, Clone)]
+pub struct MetaDbConfig {
+    pub ip: String,
+    pub port: i32,
+    pub username: String,
+    pub password: String,
+    pub database: String,
 }
 
 pub async fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Error> {

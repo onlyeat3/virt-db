@@ -15,6 +15,7 @@ mod server;
 mod metrics;
 mod sys_log;
 mod sys_config;
+mod meta;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -36,7 +37,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Err(Box::try_from(err).unwrap());
     }
     let sys_config = sys_config_wrapper.unwrap();
+
     metrics::enable_metrics();
+    meta::enable_meta_refresh_job(sys_config.clone()).await;
+
     let r = start(sys_config);
     info!("MySQL Server Proxy Started.");
     return r.await;
