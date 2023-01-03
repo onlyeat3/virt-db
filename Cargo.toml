@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "server",
-    "admin/app", "admin/bin", "admin/configs", "admin/db", "admin/migration"
+    "admin"
 ]
 [profile.release]
 codegen-units = 1

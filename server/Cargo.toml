@@ -33,5 +33,7 @@ quanta = "0.10.1"
 metrics-util = "0.14.0"
 rand = "0.8.5"
 
+async-once-cell = "0.4.2"
+
 serde_derive = "1.0.152"
 toml = "0.5.10"

@@ -1,12 +1,11 @@
 [package]
-edition = "2021"
-name = "configs"
+name = "admin"
 version = "0.1.0"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-once_cell = "1"
-serde = {version = "1.0", features = ["derive"]}
-
-toml = "0.5"
+actix-web = "4"
+log = "*"
+env_logger = "0.9.0"
