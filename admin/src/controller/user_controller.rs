@@ -1,7 +1,7 @@
-use actix_web::{get, http, web, App, HttpServer, Responder, post, HttpResponse};
-use actix_web::web::Json;
-use log::info;
-use serde_json::json;
+use actix_web::{web, Responder, post, HttpResponse};
+
+
+
 use crate::model::user_model;
 use crate::model::user_model::{LoginResp, Role};
 

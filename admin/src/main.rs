@@ -1,6 +1,6 @@
 use actix_cors::Cors;
-use actix_settings::{ApplySettings as _, Mode, Settings};
-use actix_web::{App, get, http, HttpServer, post, Responder, web};
+use actix_settings::{Settings};
+use actix_web::{App, HttpServer};
 use actix_web::http::header;
 use actix_web::middleware::Logger;
 use env_logger::Env;
@@ -13,7 +13,7 @@ mod model;
 async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init_from_env(Env::default().default_filter_or("info"));
-    let mut settings = Settings::parse_toml("actix.toml")
+    let settings = Settings::parse_toml("actix.toml")
         .expect("Failed to parse `Settings` from config.toml");
     info!("settings:{:?}",settings);
 

@@ -1,4 +1,4 @@
-#[warn()]
+
 pub mod user_model;
 
 use serde::{Serialize, Deserialize};

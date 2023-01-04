@@ -1,6 +1,6 @@
-use std::fmt::format;
+
 use crate::mysql_protocol::{MySQL};
-use log::{error};
+
 use opensrv_mysql::*;
 use tokio::net::TcpListener;
 use crate::sys_config::VirtDBConfig;

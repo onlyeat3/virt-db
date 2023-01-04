@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime};
 use std::{io};
 
-use log::{debug, error, info, trace};
+use log::{debug, trace};
 use metrics::histogram;
 use mysql_async::prelude::Queryable;
 use mysql_async::{
@@ -384,8 +384,8 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
 
     async fn on_execute<'a>(
         &'a mut self,
-        id: u32,
-        params: ParamParser<'a>,
+        _id: u32,
+        _params: ParamParser<'a>,
         results: QueryResultWriter<'a, W>,
     ) -> Result<(), Self::Error> {
         // let start_time = SystemTime::now();
@@ -448,7 +448,7 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
                 histogram!("sql_duration", duration as f64, "sql" => String::from(sql.clone()));
                 Ok(writer.finish().await?)
             }
-            Err(mut e) => {
+            Err(e) => {
                 results
                     .error(ErrorKind::ER_YES, e.to_string().as_bytes())
                     .await?;

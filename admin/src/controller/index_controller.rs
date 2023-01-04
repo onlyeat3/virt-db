@@ -1,5 +1,5 @@
-use actix_web::{get, http, web, App, HttpServer, Responder, post};
-use log::info;
+use actix_web::{get, Responder};
+
 
 #[get("/")]
 pub async fn index() -> impl Responder {

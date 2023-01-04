@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use nom::combinator::iterator;
-use redis::{Commands, RedisResult, RedisWrite, ToRedisArgs};
-use sqlparser::ast::{Query, Statement};
-use sqlparser::dialect::{Dialect, MySqlDialect};
-use sqlparser::keywords::Keyword::FROM;
-use sqlparser::parser::Parser;
+
+use redis::{Commands, RedisResult};
+
+use sqlparser::dialect::{MySqlDialect};
+
+
 use sqlparser::tokenizer::{Token, Tokenizer};
 
 mod tests {}

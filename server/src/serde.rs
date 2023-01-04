@@ -3,7 +3,7 @@ extern crate slab;
 use std::sync::Arc;
 use std::{fmt};
 
-use log::{debug, info, trace};
+use log::{trace};
 use mysql_async::{
     Value,
 };
@@ -12,7 +12,7 @@ use mysql_common::packets as mycp;
 use mysql_common::proto::MySerialize;
 use mysql_common::row::new_row;
 use opensrv_mysql::Column;
-use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{Serialize, Serializer};
 
