@@ -13,7 +13,9 @@ mod model;
 async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init_from_env(Env::default().default_filter_or("info"));
-    
+    let mut settings = Settings::parse_toml("actix.toml")
+        .expect("Failed to parse `Settings` from config.toml");
+    info!("settings:{:?}",settings);
 
     let port = 8080;
     let http_server = HttpServer::new(|| {
