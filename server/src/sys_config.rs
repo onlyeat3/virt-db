@@ -1,9 +1,10 @@
-
+#[macro_use]
+use std::error::Error;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use toml;
 use serde_derive::Deserialize;
-use log::{error, info};
+use log::{debug, error, info, trace};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct VirtDBConfig {
