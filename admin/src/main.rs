@@ -1,4 +1,3 @@
-
 use actix_cors::Cors;
 use actix_settings::{ApplySettings as _, BasicSettings};
 use actix_web::{App, get, http, HttpServer, post, Responder, web};
@@ -35,13 +34,12 @@ async fn main() -> std::io::Result<()> {
                 .app_data(web::Data::new(settings.clone()))
 
                 .wrap(Cors::default()
-                          .allowed_origin("http://localhost:8080")
-                          .allowed_origin("http://localhost:3100")
-                          .allowed_methods(vec!["GET", "POST", "OPTIONS"])
-                          .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
-                          .allowed_header(header::CONTENT_TYPE)
-                          .supports_credentials()
-                          .max_age(3600),
+                    .allowed_origin("http://localhost:8848")
+                    // .allow_any_origin()
+                    .allow_any_method()
+                    .allow_any_header()
+                    .supports_credentials()
+                    .max_age(3600)
                 )
                 .service(controller::index_controller::index)
                 .service(controller::user_controller::login)
