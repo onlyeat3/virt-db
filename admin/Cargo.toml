@@ -11,6 +11,10 @@ actix-cors = "0.6.4"
 actix-settings = "0.6.0"
 jsonwebtoken = "8.2.0"
 chrono = "0.4.23"
+sqlx = { version = "0.6", features = [ "runtime-actix-native-tls","mysql" ] }
+mysql = "23.0.1"
+anyhow = "1.0"
+
 
 log = "*"
 env_logger = "0.10.0"
