@@ -31,7 +31,7 @@ pub fn encode_token(v:CurrentUser, duration_in_seconds:i32) -> Result<String, Bo
         let exp_date_time = Local::now();
         let one_hour = FixedOffset::east_opt(duration_in_seconds)
             .ok_or_else(||{format!("Convert seconds {:?} to FixedOffset fail",duration_in_seconds)})?;
-        exp_date_time.add(one_hour);
+        let exp_date_time= exp_date_time.add(one_hour);
         let exp = exp_date_time.timestamp();
         info!("token expire at {:?}",exp_date_time);
         let claims = Claims{
