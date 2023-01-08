@@ -16,13 +16,14 @@ use serde::{Deserialize, Serialize};
 use crate::utils;
 
 pub mod user_model;
+pub mod cache_config_model;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataWrapper<V> {
     pub code: i32,
     pub message: String,
     pub success: bool,
-    pub result: V,
+    pub data: Option<V>,
 }
 
 impl<V> DataWrapper<V> {
@@ -35,7 +36,7 @@ impl<V> DataWrapper<V> {
             code,
             message,
             success: code == 0,
-            result: v,
+            data: Some(v),
         }
     }
 }

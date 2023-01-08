@@ -7,6 +7,7 @@ use env_logger::Env;
 use log::info;
 use serde::{de, Deserialize};
 use crate::config::app_config::ApplicationSettings;
+use crate::controller::cache_config_controller;
 
 mod controller;
 mod model;
@@ -44,6 +45,8 @@ async fn main() -> std::io::Result<()> {
                 .service(controller::index_controller::index)
                 .service(controller::user_controller::login)
                 .service(controller::user_controller::get_user_info)
+                .service(controller::mock_controller::get_async_routes)
+                .service(cache_config_controller::list)
         }
     })
         .apply_settings(&settings)
