@@ -12,21 +12,19 @@ use crate::utils::jwt::encode_token;
 pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Data<BasicSettings<ApplicationSettings>>) -> actix_web::Result<HttpResponse> {
     let user_id = 1;
     let user_name = &login_req.username;
-    let mut login_resp = LoginResp {
-        roles: vec![Role { role_name: String::from("Super Admin"), value: String::from("super") }],
-        user_id: user_id.to_string(),
-        username: login_req.username.to_string(),
-        real_name: login_req.username.to_string(),
-        desc: "".to_string(),
-        token: Option::None,
-    };
     let current_user = CurrentUser {
         user_id,
         user_name: login_req.username.to_string(),
     };
     let token = encode_token(current_user, 3600);
+    let mut login_resp = LoginResp {
+        access_token: token?,
+        refresh_token: "".to_string(),
+        expires: "".to_string(),
+        roles: vec![String::from("admin")],
+        username: user_name.clone(),
+    };
 
-    login_resp.token = Some(token?);
     return Ok(HttpResponse::Ok()
         .json(DataWrapper::success(login_resp)));
 }

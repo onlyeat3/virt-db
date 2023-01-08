@@ -1,4 +1,4 @@
-use serde::{Serialize,Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug,Serialize,Deserialize)]
 pub struct LoginReq{
@@ -6,23 +6,14 @@ pub struct LoginReq{
     pub password:String,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Role {
-    pub role_name: String,
-    pub value: String,
-}
-
 #[derive(Debug,Serialize,Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginResp{
-    pub roles:Vec<Role>,
-    #[serde(rename(serialize="userId",deserialize="userId"))]
-    pub user_id:String,
+    pub access_token:String,
+    pub refresh_token:String,
+    pub expires:String,
+    pub roles:Vec<String>,
     pub username:String,
-    #[serde(rename(serialize="userId",deserialize="userId"))]
-    pub real_name:String,
-    pub desc:String,
-    pub token:Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
