@@ -8,7 +8,7 @@ use crate::model::{CurrentUser, DataWrapper, user_model};
 use crate::model::user_model::{GetUserInfoResp, LoginResp};
 use crate::utils::jwt::encode_token;
 
-#[post("/basic-api/login")]
+#[post("/login")]
 pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Data<BasicSettings<ApplicationSettings>>) -> actix_web::Result<HttpResponse> {
     let user_id = 1;
     let user_name = &login_req.username;
@@ -29,7 +29,7 @@ pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Da
         .json(DataWrapper::success(login_resp)));
 }
 
-#[get("/basic-api/getUserInfo")]
+#[get("/getUserInfo")]
 pub async fn get_user_info(current_user: CurrentUser) -> impl Responder {
     info!("current_user:{:?}",current_user);
     let get_user_info_resp = GetUserInfoResp {
