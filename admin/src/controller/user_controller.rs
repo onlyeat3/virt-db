@@ -5,7 +5,7 @@ use log::info;
 use serde_json::json;
 use crate::config::app_config::ApplicationSettings;
 use crate::model::{CurrentUser, DataWrapper, user_model};
-use crate::model::user_model::{GetUserInfoResp, LoginResp, Role};
+use crate::model::user_model::{GetUserInfoResp, LoginResp};
 use crate::utils::jwt::encode_token;
 
 #[post("/basic-api/login")]
@@ -41,7 +41,7 @@ pub async fn get_user_info(current_user: CurrentUser) -> impl Responder {
         password: "".to_string(),
         token: "".to_string(),
         home_path: "/dashboard/analysis".to_string(),
-        roles: vec![Role { role_name: "Super Admin".to_string(), value: "super".to_string() }],
+        roles: vec![String::from("admin")],
     };
     return HttpResponse::Ok()
         .json(DataWrapper::success(get_user_info_resp));

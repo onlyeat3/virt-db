@@ -27,5 +27,5 @@ pub struct GetUserInfoResp {
     pub password: String,
     pub token: String,
     pub home_path: String,
-    pub roles: Vec<Role>,
+    pub roles: Vec<String>,
 }
