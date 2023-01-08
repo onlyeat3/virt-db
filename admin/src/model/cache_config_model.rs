@@ -10,8 +10,10 @@ pub struct CacheConfigEntity {
     pub duration: Option<i32>,
     pub cache_name: Option<String>,
     pub enabled: Option<i32>,
-    pub created_by: Option<i32>,
-    pub updated_by: Option<i32>,
+    // pub created_by: Option<i32>,
+    // pub updated_by: Option<i32>,
+    pub created_at: Option<chrono::DateTime<chrono::Local>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Local>>,
 }
 
 
