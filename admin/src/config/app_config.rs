@@ -9,6 +9,7 @@ use serde::{Deserialize};
 #[serde(rename_all = "kebab-case")]
 pub struct ApplicationSettings {
     pub jwt_secret: String,
+    pub mysql_url: String,
 }
 
 pub static mut SETTINGS: Option<BasicSettings<ApplicationSettings>> = None;

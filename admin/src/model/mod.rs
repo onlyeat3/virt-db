@@ -41,6 +41,26 @@ impl<V> DataWrapper<V> {
     }
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageResponse<T> {
+    pub list: Vec<T>,
+    pub total: i64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageParam{
+    pub page_no:i64,
+    pub page_size:i64,
+}
+
+impl PageParam{
+    pub fn get_start_row(self) -> i64 {
+        (self.page_no * self.page_size) - (self.page_size - 1)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrentUser {
     pub user_id: i32,
@@ -62,7 +82,7 @@ impl FromRequest for CurrentUser {
                 Some(header) => {
                     match header.to_str().ok() {
                         Some(token) => {
-                            let r = utils::jwt::parse_current_user(token.to_string())?;
+                            let r = utils::jwt::parse_current_user(token.replace("Bearer","").trim().to_string())?;
                             Ok(r)
                         }
                         None => {

@@ -71,3 +71,4 @@ private-key = "path/to/cert/key.pem"
 # See the `README.md` file for more details on how to use this.
 [application]
 jwt-secret="replace_it"
+mysql-url="mysql://root:root@localhost:3306/virt-db-meta"

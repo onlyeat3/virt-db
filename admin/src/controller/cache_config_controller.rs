@@ -1,17 +1,23 @@
-use actix_settings::{BasicSettings, Settings};
-use actix_web::{get, http, web, App, HttpServer, Responder, post, HttpResponse, ResponseError};
-use actix_web::web::Json;
-use log::info;
+use actix_web::{get, HttpResponse, post, Responder, web};
+use actix_web::web::Data;
 use serde_json::json;
-use crate::config::app_config::ApplicationSettings;
-use crate::model::{CurrentUser, DataWrapper, user_model};
-use crate::model::cache_config_model::CacheConfigListReq;
-use crate::model::user_model::{GetUserInfoResp, LoginResp};
-use crate::utils::jwt::encode_token;
+use sqlx::{Database, MySql, MySqlPool, Pool, query};
+
+use crate::error::SysError;
+use crate::model::{cache_config_model, CurrentUser, DataWrapper, PageResponse};
+use crate::model::cache_config_model::{CacheConfigEntity, CacheConfigListParam};
 
 #[post("/cache_config/list")]
-pub async fn list(req: web::Json<CacheConfigListReq>, settings: web::Data<BasicSettings<ApplicationSettings>>) -> actix_web::Result<HttpResponse> {
+pub async fn list(req:web::Json<CacheConfigListParam>,pool: Data<MySqlPool>,current_user: CurrentUser) -> Result<HttpResponse, SysError> {
+    let cache_config_list_result = sqlx::query_as::<_, CacheConfigEntity>("SELECT * from cache_config")
+        .fetch_all(pool.get_ref())
+        .await
+        .map_err(anyhow::Error::new)?;
 
-    return Ok(HttpResponse::Ok()
-        .json(DataWrapper::<Vec<String>>::success(vec![])));
+    let data_wrapper = DataWrapper::success(PageResponse{
+        list: cache_config_list_result,
+        total: 0,
+    });
+    Ok(HttpResponse::Ok()
+        .json(data_wrapper))
 }
