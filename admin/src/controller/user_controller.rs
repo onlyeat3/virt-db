@@ -16,7 +16,7 @@ pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Da
         user_id,
         user_name: login_req.username.to_string(),
     };
-    let token = encode_token(current_user, 3600);
+    let token = encode_token(current_user, 3600*24);
     let mut login_resp = LoginResp {
         access_token: token?,
         refresh_token: "".to_string(),
