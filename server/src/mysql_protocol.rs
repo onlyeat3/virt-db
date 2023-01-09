@@ -1,15 +1,13 @@
 extern crate slab;
 
 use std::collections::HashMap;
-use std::time::{SystemTime};
-use std::{io};
+use std::io;
+use std::time::SystemTime;
 
 use log::{debug, error, info, trace};
 use metrics::histogram;
 use mysql_async::prelude::Queryable;
-use mysql_async::{
-    Conn, Error, QueryResult, Row, TextProtocol,
-};
+use mysql_async::{Conn, Error, QueryResult, Row, TextProtocol};
 use redis::aio::Connection;
 use redis::{AsyncCommands, RedisError, RedisResult};
 use slab::Slab;
@@ -17,14 +15,14 @@ use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::{Parser, ParserError};
 
+use crate::meta;
+use crate::meta::CacheConfigEntity;
 use opensrv_mysql::{
-    AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter,
-    ParamParser, QueryResultWriter, StatementMetaWriter,
+    AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, ParamParser, QueryResultWriter,
+    StatementMetaWriter,
 };
 use sqlparser::tokenizer::{Token, Tokenizer};
 use tokio::io::AsyncWrite;
-use crate::meta;
-use crate::meta::CacheConfigEntity;
 
 pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bool {
     let tokens1: Vec<Token> = Tokenizer::new(dialect, pattern)
@@ -222,45 +220,35 @@ impl MySQL {
         &'a mut self,
         sql: &str,
     ) -> Result<MySQLResult, VirtDBMySQLError> {
-        // let r = self.connection.query(query);
+        let r = self.connection.query(query);
         trace!("sql:{}", sql);
         let redis_key = format!("cache:{:?}", sql);
         let cache_config_entity_list = meta::get_cache_config_entity_list();
 
         let mysql_dialect = MySqlDialect {};
-        let mut cache_config_entity_option:Option<&CacheConfigEntity> = None;
+        let mut cache_config_entity_option: Option<&CacheConfigEntity> = None;
         for entity in cache_config_entity_list {
-            if is_pattern_match(&*entity.sql_template, sql,&mysql_dialect){
+            if is_pattern_match(
+                &*entity.sql_template.to_uppercase().trim(),
+                sql.to_uppercase().trim(),
+                &mysql_dialect,
+            ) {
                 cache_config_entity_option = Some(entity);
                 break;
             }
-        };
-        if cache_config_entity_option.is_some(){
-            let ast_opt: Result<Vec<Statement>, ParserError> = Parser::parse_sql(&self.dialect, sql);
-            if let Ok(asts) = ast_opt {
-                for ast in asts {
-                    trace!("ast:{:?}", ast);
-                    if let Statement::Query(boxed_query) = ast {
-                        let query = boxed_query.as_ref();
-                        trace!("ast query:{:?}", query);
-                        if let SetExpr::Select(_select_expr_box) = &query.body {
-                            // let select_expr = select_expr_box.as_ref();
-                            // for table in &select_expr.from {
-                            //     info!("table:{:?}", table);
-                            // }
-                            let redis_conn = self.get_redis_connection().await?;
-                            let cached_value_result: Result<String, RedisError> =
-                                redis_conn.get(redis_key.clone()).await;
-                            if let Ok(redis_v) = cached_value_result {
-                                let mysql_result: MySQLResult =
-                                    serde_json::from_str(&*redis_v).unwrap();
-                                trace!("decoded_v:{:?}", mysql_result);
-                                return Ok(mysql_result);
-                            }
-                        }
-                        trace!("ast query body:{:?}", query.body);
-                    }
-                }
+        }
+        if cache_config_entity_option.is_some() {
+            // let select_expr = select_expr_box.as_ref();
+            // for table in &select_expr.from {
+            //     info!("table:{:?}", table);
+            // }
+            let redis_conn = self.get_redis_connection().await?;
+            let cached_value_result: Result<String, RedisError> =
+                redis_conn.get(redis_key.clone()).await;
+            if let Ok(redis_v) = cached_value_result {
+                let mysql_result: MySQLResult = serde_json::from_str(&*redis_v).unwrap();
+                trace!("decoded_v:{:?}", mysql_result);
+                return Ok(mysql_result);
             }
         }
 
@@ -291,17 +279,21 @@ impl MySQL {
 
         let rows = query_result.collect::<Row>().await?;
         let mysql_result = MySQLResult { cols, rows };
-        // let rows: Vec<Row> = query_result.flatten().collect();
+        let rows: Vec<Row> = query_result.flatten().collect();
 
-        if let Some(cache_config_entity)=cache_config_entity_option{
+        if let Some(cache_config_entity) = cache_config_entity_option {
             let json_v = serde_json::to_string(&mysql_result).unwrap_or_default();
             trace!("json_v:{}", json_v);
             let rv: RedisResult<Vec<Vec<u8>>> = self
                 .get_redis_connection()
                 .await?
-                .set_ex(redis_key.clone(), json_v.as_str(), cache_config_entity.duration as usize)
+                .set_ex(
+                    redis_key.clone(),
+                    json_v.as_str(),
+                    cache_config_entity.duration as usize,
+                )
                 .await;
-            trace!("redis set. key:{:?},result:{:?}",redis_key,rv);
+            trace!("redis set. key:{:?},result:{:?}", redis_key, rv);
         }
         Ok(mysql_result)
     }
@@ -340,13 +332,11 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
                 let columns: Vec<_> = stmt
                     .columns()
                     .into_iter()
-                    .map(|c| {
-                        Column {
-                            table: String::from(c.schema_str().to_owned()),
-                            column: String::from(c.name_str().to_owned()),
-                            coltype: c.column_type(),
-                            colflags: ColumnFlags::empty(),
-                        }
+                    .map(|c| Column {
+                        table: String::from(c.schema_str().to_owned()),
+                        column: String::from(c.name_str().to_owned()),
+                        coltype: c.column_type(),
+                        colflags: ColumnFlags::empty(),
                     })
                     .collect();
 
