@@ -50,7 +50,6 @@ async fn main() -> std::io::Result<()> {
         move || {
             App::new()
                 .wrap(Logger::default())
-                .wrap(Logger::new("%a %{User-Agent}i"))
 
                 .wrap(Condition::new(
                     settings.actix.enable_compression,
