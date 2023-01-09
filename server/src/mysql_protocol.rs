@@ -220,7 +220,6 @@ impl MySQL {
         &'a mut self,
         sql: &str,
     ) -> Result<MySQLResult, VirtDBMySQLError> {
-        let r = self.connection.query(query);
         trace!("sql:{}", sql);
         let redis_key = format!("cache:{:?}", sql);
         let cache_config_entity_list = meta::get_cache_config_entity_list();
