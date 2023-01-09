@@ -7,9 +7,8 @@ use actix_web::http::header;
 use actix_web::middleware::{Compress, Condition, Logger};
 use env_logger::Env;
 use log::info;
-use sea_orm::{ConnectOptions, Database};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use serde::{de, Deserialize};
-use sqlx::MySqlPool;
 use crate::config::app_config::ApplicationSettings;
 use crate::controller::cache_config_controller;
 
@@ -20,6 +19,10 @@ mod config;
 mod error;
 mod entity;
 
+#[derive(Debug, Clone)]
+struct AppState {
+    conn: DatabaseConnection,
+}
 
 #[actix_web::main] // or #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -37,7 +40,10 @@ async fn main() -> std::io::Result<()> {
         .sqlx_logging(true)
         .sqlx_logging_level(log::LevelFilter::Info); // Setting default PostgreSQL schema
 
-    let db = Database::connect(opt).await?;
+    let conn = Database::connect(opt).await.unwrap();
+    let app_state = AppState{
+        conn,
+    };
 
     let http_server = HttpServer::new({
         let settings = settings.clone();
@@ -51,7 +57,7 @@ async fn main() -> std::io::Result<()> {
                     Compress::default(),
                 ))
                 .app_data(web::Data::new(settings.clone()))
-                .app_data(web::Data::new(db))
+                .app_data(web::Data::new(app_state.clone()))
 
                 .wrap(Cors::default()
                     .allowed_origin("http://localhost:8848")

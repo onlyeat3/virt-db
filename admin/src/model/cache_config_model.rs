@@ -1,21 +1,6 @@
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 
 use crate::model::{PageParam};
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct CacheConfigEntity {
-    pub id: Option<i32>,
-    pub sql_template: Option<String>,
-    pub duration: Option<i32>,
-    pub cache_name: Option<String>,
-    pub enabled: Option<i32>,
-    // pub created_by: Option<i32>,
-    // pub updated_by: Option<i32>,
-    pub created_at: Option<chrono::DateTime<chrono::Local>>,
-    pub updated_at: Option<chrono::DateTime<chrono::Local>>,
-}
-
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

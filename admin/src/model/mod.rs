@@ -51,13 +51,26 @@ pub struct PageResponse<T> {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PageParam{
-    pub page_no:i64,
-    pub page_size:i64,
+    pub page_no:Option<i64>,
+    pub page_size:Option<i64>,
 }
 
 impl PageParam{
-    pub fn get_start_row(self) -> i64 {
-        (self.page_no * self.page_size) - (self.page_size - 1)
+    pub fn get_page_no(self) -> u64 {
+        let mut page_no = self.page_no.unwrap_or(0) as u64;
+        if page_no > 0{
+            page_no = page_no - 1
+        }
+        page_no
+    }
+    pub fn get_start_row(self) -> u64 {
+        let page_no = self.clone().get_page_no();
+        let page_size = self.clone().get_limit();
+        ((page_no * page_size) - (page_size - 1)) as u64
+    }
+
+    pub fn get_limit(self) -> u64 {
+        self.page_size.unwrap_or(10) as u64
     }
 }
 
