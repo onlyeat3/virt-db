@@ -12,6 +12,7 @@ use jsonwebtoken::jwk::KeyOperations::Verify;
 use log::{info};
 use serde::{Deserialize, Serialize};
 use crate::config::app_config::SETTINGS;
+use crate::error::SysError;
 
 use crate::model::CurrentUser;
 
@@ -26,7 +27,7 @@ pub struct Claims {
 }
 
 
-pub fn encode_token(v:CurrentUser, duration_in_seconds:i64) -> Result<String, Box<dyn error::Error>> {
+pub fn encode_token(v:CurrentUser, duration_in_seconds:i64) -> anyhow::Result<String> {
     unsafe {
         let exp_date_time = Local::now();
         let exp_date_time = exp_date_time + Duration::seconds(duration_in_seconds);
@@ -38,20 +39,21 @@ pub fn encode_token(v:CurrentUser, duration_in_seconds:i64) -> Result<String, Bo
             exp: exp_date_time.timestamp(),
             iat: 0,
         };
-        return Ok(encode(&Header::default(), &claims, &EncodingKey::from_secret(SETTINGS.clone().unwrap().application.jwt_secret.as_ref()))?);
+        return anyhow::Ok(encode(&Header::default(), &claims, &EncodingKey::from_secret(SETTINGS.clone().unwrap().application.jwt_secret.as_ref()))?);
     }
 }
 
-pub fn parse_current_user(token:String) -> Result<CurrentUser, Box<dyn error::Error>> {
-    Ok(verify_and_parse_token(token)?.claims.subject)
+pub fn parse_current_user(token:String) -> anyhow::Result<CurrentUser> {
+    anyhow::Ok(verify_and_parse_token(token)?.claims.subject)
 }
 
-pub fn verify_and_parse_token(token:String) -> Result<TokenData<Claims>, Box<dyn error::Error>> {
+pub fn verify_and_parse_token(token:String) -> anyhow::Result<TokenData<Claims>> {
     unsafe {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_audience(&["virt-db-admin"]);
-        let token_data = decode::<Claims>(&token, &DecodingKey::from_secret(SETTINGS.clone().unwrap().clone().application.jwt_secret.as_ref()), &validation)
-            .map_err(|err|{err.to_string()})?;
-        Ok(token_data)
+        let key = &DecodingKey::from_secret(SETTINGS.clone().unwrap().clone().application.jwt_secret.as_ref());
+        let token_data = decode::<Claims>(&token, key, &validation)
+            .map_err(|err|{anyhow::Error::new(err)})?;
+        anyhow::Ok(token_data)
     }
 }

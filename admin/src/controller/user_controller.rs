@@ -4,12 +4,13 @@ use actix_web::web::Json;
 use log::info;
 use serde_json::json;
 use crate::config::app_config::ApplicationSettings;
+use crate::error::SysError;
 use crate::model::{CurrentUser, DataWrapper, user_model};
 use crate::model::user_model::{GetUserInfoResp, LoginResp};
 use crate::utils::jwt::encode_token;
 
 #[post("/login")]
-pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Data<BasicSettings<ApplicationSettings>>) -> actix_web::Result<HttpResponse> {
+pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Data<BasicSettings<ApplicationSettings>>) -> Result<HttpResponse,SysError> {
     let user_id = 1;
     let user_name = &login_req.username;
     let current_user = CurrentUser {

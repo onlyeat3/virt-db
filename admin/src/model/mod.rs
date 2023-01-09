@@ -11,6 +11,7 @@ use actix_web::http::header::{HeaderValue, ToStrError};
 use futures::future::{err, ok};
 use log::info;
 use serde::{Deserialize, Serialize};
+use crate::error::SysError;
 
 
 use crate::utils;
@@ -28,15 +29,15 @@ pub struct DataWrapper<V> {
 
 impl<V> DataWrapper<V> {
     pub fn success(v: V) -> DataWrapper<V> {
-        DataWrapper::result(0, String::from("OK"), v)
+        DataWrapper::result(0, String::from("OK"), Some(v))
     }
 
-    pub fn result(code: i32, message: String, v: V) -> DataWrapper<V> {
+    pub fn result(code: i32, message: String, v: Option<V>) -> DataWrapper<V> {
         DataWrapper {
             code,
             message,
             success: code == 0,
-            data: Some(v),
+            data: v,
         }
     }
 }
@@ -95,7 +96,7 @@ pub struct CurrentUser {
 }
 
 impl FromRequest for CurrentUser {
-    type Error = actix_web::Error;
+    type Error = SysError;
     type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
 
 
@@ -104,7 +105,7 @@ impl FromRequest for CurrentUser {
         return Box::pin(async move {
             return match req.headers().get("Authorization") {
                 None => {
-                    Err(ErrorUnauthorized("unauthorized"))
+                    Err(SysError::BIZ(String::from("TOKEN无效或已过期")))
                 }
                 Some(header) => {
                     match header.to_str().ok() {
@@ -113,7 +114,7 @@ impl FromRequest for CurrentUser {
                             Ok(r)
                         }
                         None => {
-                            Err(ErrorUnauthorized("unauthorized"))
+                            Err(SysError::BIZ(String::from("TOKEN无效或已过期")))
                         }
                     }
                 }
