@@ -1,6 +1,6 @@
 [server]
 dev = true
-port = 3307
+port = 10101
 username = "root"
 password = "root"
 
