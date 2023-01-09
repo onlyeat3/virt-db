@@ -4,7 +4,7 @@ use std::ops::Add;
 use std::rc::Rc;
 use std::time::SystemTime;
 
-use chrono::{DateTime, FixedOffset, Local, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
 use jsonwebtoken::{Algorithm, decode, DecodingKey, encode, EncodingKey, Header, TokenData, Validation};
 use jsonwebtoken::crypto::verify;
 use jsonwebtoken::errors::ErrorKind;
@@ -26,12 +26,10 @@ pub struct Claims {
 }
 
 
-pub fn encode_token(v:CurrentUser, duration_in_seconds:i32) -> Result<String, Box<dyn error::Error>> {
+pub fn encode_token(v:CurrentUser, duration_in_seconds:i64) -> Result<String, Box<dyn error::Error>> {
     unsafe {
         let exp_date_time = Local::now();
-        let one_hour = FixedOffset::east_opt(duration_in_seconds)
-            .ok_or_else(||{format!("Convert seconds {:?} to FixedOffset fail",duration_in_seconds)})?;
-        let exp_date_time= exp_date_time.add(one_hour);
+        let exp_date_time = exp_date_time + Duration::seconds(duration_in_seconds);
         let exp = exp_date_time.timestamp();
         info!("token expire at {:?}",exp_date_time);
         let claims = Claims{
