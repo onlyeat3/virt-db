@@ -11,7 +11,7 @@ actix-cors = "0.6.4"
 actix-settings = "0.6.0"
 jsonwebtoken = "8.2.0"
 chrono = "0.4.23"
-sqlx = { version = "0.6", features = ["runtime-actix-native-tls", "mysql","sqlx-macros","chrono"] }
+sea-orm = { version = "^0", features = [ "sqlx-mysql", "runtime-tokio-native-tls", "macros" ] }
 mysql = "23.0.1"
 anyhow = "1.0"
 
