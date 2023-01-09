@@ -72,6 +72,7 @@ async fn main() -> std::io::Result<()> {
                 .service(controller::user_controller::get_user_info)
                 .service(controller::mock_controller::get_async_routes)
                 .service(cache_config_controller::list)
+                .service(cache_config_controller::create)
         }
     })
         .apply_settings(&settings)
