@@ -43,6 +43,20 @@ impl<V> DataWrapper<V> {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct IdParam {
+    pub id: i32,
+}
+
+impl IdParam {
+    pub fn new(id:i32) -> IdParam {
+        IdParam{
+            id,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PageResponse<T> {
     pub list: Vec<T>,
     pub total: i64,

@@ -11,11 +11,11 @@ use sea_orm::sea_query::{Expr, Query, SimpleExpr};
 use serde_json::json;
 use crate::AppState;
 use crate::entity::cache_config;
-use crate::entity::cache_config::{ActiveModel, Entity};
+use crate::entity::cache_config::{ActiveModel, Entity, Model};
 use crate::entity::prelude::CacheConfig;
 
 use crate::error::SysError;
-use crate::model::{cache_config_model, CurrentUser, DataWrapper, PageResponse};
+use crate::model::{cache_config_model, CurrentUser, DataWrapper, IdParam, PageResponse};
 use crate::model::cache_config_model::{CacheConfigCreateParam, CacheConfigListParam};
 
 #[post("/cache_config/list")]
@@ -56,6 +56,18 @@ pub async fn create(req: web::Json<CacheConfigCreateParam>, app_state: Data<AppS
     let conn = &app_state.conn;
     req.to_owned().to_active_model()
         .save(conn)
+        .await
+        .map_err(Error::new)?;
+    let data_wrapper = DataWrapper::success("");
+    Ok(HttpResponse::Ok()
+        .json(data_wrapper))
+}
+
+#[post("/cache_config/delete")]
+pub async fn delete(req: web::Json<IdParam>, app_state: Data<AppState>, current_user: CurrentUser) -> Result<HttpResponse,SysError> {
+    let conn = &app_state.conn;
+    cache_config::Entity::delete_by_id(req.id)
+        .exec(conn)
         .await
         .map_err(Error::new)?;
     let data_wrapper = DataWrapper::success("");
