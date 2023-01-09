@@ -22,18 +22,19 @@ pub struct Claims {
     // sub: String,//token主题
     // iss:String,//被授权人
     subject: CurrentUser,
-    exp: i64,//token过期时间 UNIX时间戳
-    iat:u16,//token创建时间 UNIX时间戳
+    exp: i64,
+    //token过期时间 UNIX时间戳
+    iat: u16,//token创建时间 UNIX时间戳
 }
 
 
-pub fn encode_token(v:CurrentUser, duration_in_seconds:i64) -> anyhow::Result<String> {
+pub fn encode_token(v: CurrentUser, duration_in_seconds: i64) -> anyhow::Result<String> {
     unsafe {
         let exp_date_time = Local::now();
         let exp_date_time = exp_date_time + Duration::seconds(duration_in_seconds);
         let exp = exp_date_time.timestamp();
         info!("token expire at {:?}",exp_date_time);
-        let claims = Claims{
+        let claims = Claims {
             aud: "virt-db-admin".to_string(),
             subject: v,
             exp: exp_date_time.timestamp(),
@@ -43,17 +44,19 @@ pub fn encode_token(v:CurrentUser, duration_in_seconds:i64) -> anyhow::Result<St
     }
 }
 
-pub fn parse_current_user(token:String) -> anyhow::Result<CurrentUser> {
-    anyhow::Ok(verify_and_parse_token(token)?.claims.subject)
+pub fn parse_current_user(token: String) -> Result<CurrentUser, SysError> {
+    Ok(verify_and_parse_token(token)?.claims.subject)
 }
 
-pub fn verify_and_parse_token(token:String) -> anyhow::Result<TokenData<Claims>> {
+pub fn verify_and_parse_token(token: String) -> Result<TokenData<Claims>, SysError> {
     unsafe {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_audience(&["virt-db-admin"]);
         let key = &DecodingKey::from_secret(SETTINGS.clone().unwrap().clone().application.jwt_secret.as_ref());
         let token_data = decode::<Claims>(&token, key, &validation)
-            .map_err(|err|{anyhow::Error::new(err)})?;
-        anyhow::Ok(token_data)
+            .map_err(|e| {
+                SysError::BIZ(String::from("token无效或已过期"))
+            })?;
+        Ok(token_data)
     }
 }
