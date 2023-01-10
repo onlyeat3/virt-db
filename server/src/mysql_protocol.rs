@@ -1,4 +1,4 @@
-#![allow(dead_code,unused_imports,unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables)]
 extern crate slab;
 
 use std::collections::HashMap;
@@ -9,19 +9,24 @@ use log::{debug, trace};
 use metrics::histogram;
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Error, QueryResult, Row, TextProtocol};
+use mysql_common::packets::AuthPluginData;
+use mysql_common::scramble::scramble_native;
+use nom::AsBytes;
 use opensrv_mysql::{
     AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, ParamParser, QueryResultWriter,
     StatementMetaWriter,
 };
 use redis::aio::Connection;
 use redis::{AsyncCommands, RedisError, RedisResult};
+use sha1::{Digest, Sha1};
 use slab::Slab;
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::tokenizer::{Token, Tokenizer};
 use tokio::io::AsyncWrite;
 
-use crate::{meta, utils};
 use crate::meta::CacheConfigEntity;
+use crate::sys_config::ServerConfig;
+use crate::{meta, sys_config, utils};
 
 // this is where the proxy server implementation starts
 
@@ -40,6 +45,7 @@ pub struct MySQLResult {
 }
 
 pub struct MySQL {
+    _conn_id: u32,
     _mysql_url: String,
     _redis_url: String,
     _mysql_connection: HashMap<String, Conn>,
@@ -47,17 +53,25 @@ pub struct MySQL {
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     prepared: Slab<Prepared>,
     dialect: MySqlDialect,
+    server_config: ServerConfig,
 }
 
 impl MySQL {
-    pub fn new(mysql_url: &str, redis_url: String) -> Self {
+    pub fn new(
+        mysql_url: &str,
+        redis_url: String,
+        conn_id: u32,
+        server_config: ServerConfig,
+    ) -> Self {
         MySQL {
+            _conn_id: conn_id,
             _mysql_url: mysql_url.to_string(),
             _redis_url: redis_url.to_string(),
             _mysql_connection: HashMap::new(),
             _redis_conn: HashMap::new(),
             prepared: Slab::new(),
             dialect: MySqlDialect {},
+            server_config,
         }
     }
 
@@ -249,6 +263,36 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
 
     fn version(&self) -> &str {
         "virt-db 1.0.0-alpha"
+    }
+
+    fn connect_id(&self) -> u32 {
+        self._conn_id
+    }
+
+    async fn authenticate(
+        &self,
+        _auth_plugin: &str,
+        _username: &[u8],
+        _salt: &[u8],
+        _auth_data: &[u8],
+    ) -> bool {
+        if _username != self.server_config.username.as_bytes() {
+            return false;
+        }
+
+        let auth_data = _auth_data;
+        let encoded_password =
+            scramble_native(_salt, self.server_config.password.as_bytes()).unwrap_or_default();
+        let username = String::from_utf8_lossy(_username).to_string();
+        let salt = String::from_utf8_lossy(_salt).to_string();
+        info!(
+            "username:{:?},_auth_data:{:?},sha1 'root':{:?},equals:{:?}",
+            username,
+            auth_data,
+            encoded_password,
+            encoded_password == auth_data
+        );
+        return encoded_password == auth_data;
     }
 
     async fn on_prepare<'a>(

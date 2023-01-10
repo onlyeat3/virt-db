@@ -1,8 +1,8 @@
 [server]
 dev = true
 port = 10101
-username = "root"
-password = "root"
+username = "virtdb"
+password = "virtdb"
 
 [metric]
 expose_port=19091
