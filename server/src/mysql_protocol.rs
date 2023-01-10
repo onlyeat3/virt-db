@@ -297,7 +297,7 @@ impl MySQL {
         // let mysql_result_opt = handle_mysql_result(query_result_result).await;
         trace!("columns:{:?}", query_result.columns());
         let mut cols: Vec<Column> = vec![];
-        while let Some(arc_col) = query_result.columns() {
+        if let Some(arc_col) = query_result.columns() {
             cols = arc_col
                 .iter()
                 .map(|c| {
