@@ -1,8 +1,7 @@
+#![allow(unused_imports)]
 use crate::mysql_protocol::MySQL;
 use crate::sys_config::VirtDBConfig;
-use log::error;
 use opensrv_mysql::*;
-use std::fmt::format;
 use tokio::net::TcpListener;
 
 pub async fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>> {

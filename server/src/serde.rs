@@ -1,3 +1,4 @@
+#![allow(dead_code,unused_imports,unused_variables,non_camel_case_types)]
 extern crate slab;
 
 use std::fmt;
@@ -384,8 +385,8 @@ impl Serialize for MySQLResult {
             .collect();
 
         let mut struct_ser = serializer.serialize_struct("MySQLResult", 2)?;
-        struct_ser.serialize_field("cols", &cols_v);
-        struct_ser.serialize_field("rows", &rows_v);
+        struct_ser.serialize_field("cols", &cols_v)?;
+        struct_ser.serialize_field("rows", &rows_v)?;
         return struct_ser.end();
     }
 }

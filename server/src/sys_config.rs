@@ -1,4 +1,4 @@
-#[macro_use]
+#![allow(unused_imports)]
 use std::error::Error;
 use log::{debug, error, info, trace};
 use serde_derive::Deserialize;

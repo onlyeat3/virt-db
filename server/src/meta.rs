@@ -1,16 +1,10 @@
+use std::time::{Duration};
+
+use mysql_async::{Conn};
+use mysql_async::prelude::{Query, WithParams};
+use tokio::{time};
+
 use crate::sys_config::VirtDBConfig;
-use chrono::DateTime;
-use log::info;
-use mysql_async::prelude::{Query, Queryable, WithParams};
-use mysql_async::{Conn, Opts, QueryResult, TextProtocol};
-use mysql_common::frunk::hlist_pat;
-use mysql_common::row::Row;
-use sqlx::mysql::MySqlPoolOptions;
-use std::error::Error;
-use std::thread;
-use std::thread::Thread;
-use std::time::{Duration, Instant};
-use tokio::{spawn, time};
 
 static mut CACHE_CONFIG_ENTITY_LIST: Vec<CacheConfigEntity> = vec![];
 

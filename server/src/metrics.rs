@@ -1,5 +1,3 @@
-use crate::sys_config::VirtDBConfig;
-use metrics::increment_counter;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::MetricKindMask;
 use std::net::{Ipv4Addr, SocketAddrV4};

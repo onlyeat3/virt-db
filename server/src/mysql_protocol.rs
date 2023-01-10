@@ -1,11 +1,11 @@
+#![allow(dead_code,unused_imports,unused_variables)]
 extern crate slab;
 
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
 use std::io;
 use std::time::SystemTime;
 
-use log::{debug, error, info, trace};
+use log::{debug, trace};
 use metrics::histogram;
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Error, QueryResult, Row, TextProtocol};
@@ -16,9 +16,7 @@ use opensrv_mysql::{
 use redis::aio::Connection;
 use redis::{AsyncCommands, RedisError, RedisResult};
 use slab::Slab;
-use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
-use sqlparser::parser::{Parser, ParserError};
 use sqlparser::tokenizer::{Token, Tokenizer};
 use tokio::io::AsyncWrite;
 
@@ -183,7 +181,7 @@ impl MySQL {
 
 #[derive(Debug)]
 pub enum VirtDBMySQLError {
-    MySQL_ASYNC(mysql_async::Error),
+    MySqlAsync(mysql_async::Error),
     Io(io::Error),
     RedisError(redis::RedisError),
     Other(anyhow::Error),
@@ -195,7 +193,7 @@ impl VirtDBMySQLError {
         results: QueryResultWriter<'a, W>,
     ) -> Result<(), VirtDBMySQLError> {
         match self {
-            VirtDBMySQLError::MySQL_ASYNC(err) => match err {
+            VirtDBMySQLError::MySqlAsync(err) => match err {
                 Error::Driver(err) => Err(VirtDBMySQLError::Other(anyhow::Error::new(err))),
                 Error::Io(err) => Err(VirtDBMySQLError::Other(anyhow::Error::new(err))),
                 Error::Other(err) => {
@@ -237,7 +235,7 @@ impl From<io::Error> for VirtDBMySQLError {
 
 impl From<mysql_async::Error> for VirtDBMySQLError {
     fn from(e: Error) -> Self {
-        VirtDBMySQLError::MySQL_ASYNC(e)
+        VirtDBMySQLError::MySqlAsync(e)
     }
 }
 
@@ -250,7 +248,7 @@ impl From<redis::RedisError> for VirtDBMySQLError {
 impl VirtDBMySQLError {
     pub fn to_string(self) -> String {
         return match self {
-            VirtDBMySQLError::MySQL_ASYNC(mysql_async_err) => mysql_async_err.to_string(),
+            VirtDBMySQLError::MySqlAsync(mysql_async_err) => mysql_async_err.to_string(),
             VirtDBMySQLError::Io(err) => err.to_string(),
             VirtDBMySQLError::RedisError(err) => err.to_string(),
             VirtDBMySQLError::Other(err) => err.to_string(),
@@ -299,7 +297,7 @@ impl MySQL {
         // let mysql_result_opt = handle_mysql_result(query_result_result).await;
         trace!("columns:{:?}", query_result.columns());
         let mut cols: Vec<Column> = vec![];
-        for arc_col in query_result.columns() {
+        while let Some(arc_col) = query_result.columns() {
             cols = arc_col
                 .iter()
                 .map(|c| {
@@ -349,7 +347,7 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
         query: &'a str,
         info: StatementMetaWriter<'a, W>,
     ) -> Result<(), Self::Error> {
-        let startTime = SystemTime::now();
+        let start_time = SystemTime::now();
         let r = match self.get_mysql_connection().await?.prep(query).await {
             Ok(stmt) => {
                 use std::mem;
@@ -401,7 +399,7 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
             Err(e) => Err(e.into()),
         };
         let duration = SystemTime::now()
-            .duration_since(startTime)
+            .duration_since(start_time)
             .unwrap()
             .as_millis();
         histogram!("sql_duration", duration as f64, "sql" => String::from(query.clone()));
@@ -475,7 +473,7 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
                 histogram!("sql_duration", duration as f64, "sql" => String::from(sql.clone()));
                 Ok(writer.finish().await?)
             }
-            Err(mut e) => {
+            Err(e) => {
                 return e.handle_or_to_result(results).await;
             }
         };
