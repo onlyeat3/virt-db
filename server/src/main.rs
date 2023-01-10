@@ -17,6 +17,7 @@ mod serde;
 mod server;
 mod sys_config;
 mod sys_log;
+mod utils;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

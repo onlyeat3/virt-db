@@ -20,99 +20,8 @@ use sqlparser::dialect::MySqlDialect;
 use sqlparser::tokenizer::{Token, Tokenizer};
 use tokio::io::AsyncWrite;
 
-use crate::meta;
+use crate::{meta, utils};
 use crate::meta::CacheConfigEntity;
-
-pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bool {
-    let tokens1: Vec<Token> = Tokenizer::new(dialect, pattern)
-        .tokenize()
-        .unwrap_or_default();
-    let tokens2: Vec<Token> = Tokenizer::new(dialect, sql2).tokenize().unwrap_or_default();
-
-    let tokens1: Vec<Token> = tokens1
-        .into_iter()
-        .filter(|t| {
-            return match t {
-                Token::EOF => false,
-                Token::Whitespace(_) => false,
-                _ => true,
-            };
-        })
-        .collect();
-    let tokens2: Vec<Token> = tokens2
-        .into_iter()
-        .filter(|t| {
-            return match t {
-                Token::EOF => false,
-                Token::Whitespace(_) => false,
-                _ => true,
-            };
-        })
-        .collect();
-    // println!("tokens1:{:?}\ntokens2:{:?}\ntokens1.len:{:?},tokens2.len:{:?}",tokens1,tokens2,tokens1.len(),tokens2.len());
-    if tokens1.len() != tokens2.len() {
-        return false;
-    }
-
-    for index in 0..tokens1.len() {
-        let a = &tokens1[index];
-        let b = &tokens2[index];
-        // println!("a:{:?},b:{:?}",a,b);
-        let skip = match a {
-            Token::Placeholder(_) => true,
-            _ => false,
-        };
-        if skip {
-            continue;
-        }
-        if a != b {
-            return false;
-        }
-    }
-    return true;
-}
-
-//
-// async fn handle_mysql_result<'a>(
-//     query_result_result: &'a Result<&'a QueryResult<TextProtocol>, &'a mysql_async::Error>,
-// ) -> Result<MySQLResult, mysql_async::Error> {
-//     return match query_result_result {
-//         Ok(mut query_result) => {
-//             trace!("columns:{:?}", query_result.columns());
-//             let cols: Vec<Column> = query_result
-//                 .columns()
-//                 .iter()
-//                 .map(|c_arc| {
-//                     let c = c_arc.to_vec().get(0).unwrap().clone();
-//                     let t = c.column_type();
-//                     Column {
-//                         table: String::from(c.schema_str().to_owned()),
-//                         column: String::from(c.name_str().to_owned()),
-//                         coltype: t,
-//                         colflags: c.flags(),
-//                     }
-//                 })
-//                 .collect();
-//             let rows_result = query_result.collect::<Row>().await;
-//             match rows_result {
-//                 Ok(rows) => {
-//                     let mysql_result = MySQLResult { cols, rows };
-//                     Ok(mysql_result)
-//                 }
-//                 Err(err) => {
-//                     error!("get mysql err:{:?}", err);
-//                     Err(err)
-//                 }
-//             }
-//             // let rows: Vec<Row> = query_result.flatten().collect();
-//
-//         }
-//         Err(err) => {
-//             error!("get mysql err:{:?}", err);
-//             err
-//         }
-//     }
-// }
 
 // this is where the proxy server implementation starts
 
@@ -268,7 +177,7 @@ impl MySQL {
         let mysql_dialect = MySqlDialect {};
         let mut cache_config_entity_option: Option<&CacheConfigEntity> = None;
         for entity in cache_config_entity_list {
-            if is_pattern_match(
+            if utils::is_pattern_match(
                 &*entity.sql_template.to_uppercase().trim(),
                 sql.to_uppercase().trim(),
                 &mysql_dialect,
