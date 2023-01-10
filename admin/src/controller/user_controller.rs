@@ -1,3 +1,4 @@
+#![allow(unused_imports,dead_code)]
 use crate::config::app_config::ApplicationSettings;
 use crate::error::SysError;
 use crate::model::user_model::{GetUserInfoResp, LoginResp};
@@ -12,7 +13,7 @@ use serde_json::json;
 #[post("/login")]
 pub async fn login(
     login_req: web::Json<user_model::LoginReq>,
-    settings: web::Data<BasicSettings<ApplicationSettings>>,
+    _: web::Data<BasicSettings<ApplicationSettings>>,
 ) -> Result<HttpResponse, SysError> {
     let user_id = 1;
     let user_name = &login_req.username;
@@ -21,7 +22,7 @@ pub async fn login(
         user_name: login_req.username.to_string(),
     };
     let token = encode_token(current_user, 3600 * 24);
-    let mut login_resp = LoginResp {
+    let login_resp = LoginResp {
         access_token: token?,
         refresh_token: "".to_string(),
         expires: "".to_string(),

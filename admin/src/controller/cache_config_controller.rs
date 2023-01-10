@@ -1,3 +1,4 @@
+#![allow(unused_imports,unused_variables)]
 use crate::entity::cache_config;
 use crate::entity::cache_config::{ActiveModel, Entity, Model};
 use crate::entity::prelude::CacheConfig;
@@ -22,7 +23,7 @@ use crate::model::cache_config_model::{CacheConfigCreateParam, CacheConfigListPa
 use crate::model::{cache_config_model, CurrentUser, DataWrapper, IdParam, PageResponse};
 
 #[post("/cache_config/list")]
-pub async fn list(
+async fn list(
     req: web::Json<CacheConfigListParam>,
     app_state: Data<AppState>,
     current_user: CurrentUser,
@@ -65,7 +66,7 @@ pub async fn list(
 }
 
 #[post("/cache_config/createOrUpdate")]
-pub async fn create(
+async fn create(
     req: web::Json<CacheConfigCreateParam>,
     app_state: Data<AppState>,
     current_user: CurrentUser,
@@ -81,7 +82,7 @@ pub async fn create(
 }
 
 #[post("/cache_config/delete")]
-pub async fn delete(
+async fn delete(
     req: web::Json<IdParam>,
     app_state: Data<AppState>,
     current_user: CurrentUser,

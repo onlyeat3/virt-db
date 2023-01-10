@@ -33,7 +33,6 @@ pub fn encode_token(v: CurrentUser, duration_in_seconds: i64) -> anyhow::Result<
     unsafe {
         let exp_date_time = Local::now();
         let exp_date_time = exp_date_time + Duration::seconds(duration_in_seconds);
-        let exp = exp_date_time.timestamp();
         info!("token expire at {:?}", exp_date_time);
         let claims = Claims {
             aud: "virt-db-admin".to_string(),
@@ -67,7 +66,7 @@ pub fn verify_and_parse_token(token: String) -> Result<TokenData<Claims>, SysErr
                 .as_ref(),
         );
         let token_data = decode::<Claims>(&token, key, &validation)
-            .map_err(|e| SysError::BIZ(String::from("token无效或已过期")))?;
+            .map_err(|_| SysError::BIZ(String::from("token无效或已过期")))?;
         Ok(token_data)
     }
 }

@@ -29,8 +29,7 @@ pub fn load_config() -> BasicSettings<ApplicationSettings> {
         )
         .expect(config_file_load_err_msg);
         info!("settings:{:?}", settings);
-        let mut_settings = SETTINGS.insert(settings);
-        let jwt_secret = mut_settings.clone().application.jwt_secret.clone();
+        let _ = SETTINGS.insert(settings);
         SETTINGS.clone().unwrap()
     }
 }

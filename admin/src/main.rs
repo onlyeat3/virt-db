@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use crate::config::app_config::ApplicationSettings;
 use crate::controller::cache_config_controller;
 use actix_cors::Cors;
