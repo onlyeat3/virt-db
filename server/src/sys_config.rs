@@ -9,6 +9,7 @@ use toml;
 #[derive(Debug, Deserialize, Clone)]
 pub struct VirtDBConfig {
     pub server: ServerConfig,
+    pub metric: MetricConfig,
     pub mysql: BackendMySQLServerConfig,
     pub redis: RedisServerConfig,
     pub meta_db: MetaDbConfig,
@@ -35,6 +36,13 @@ pub struct BackendMySQLServerConfig {
     pub port: i32,
     pub username: String,
     pub password: String,
+}
+/**
+ * 指标监控配置
+ */
+#[derive(Debug, Deserialize, Clone)]
+pub struct MetricConfig {
+    pub expose_port: u16,
 }
 
 /**

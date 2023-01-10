@@ -2,12 +2,13 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::MetricKindMask;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::time::Duration;
+use crate::sys_config::VirtDBConfig;
 
-pub fn enable_metrics() {
+pub fn enable_metrics(sys_config:VirtDBConfig) {
     // tracing_subscriber::fmt::init();
 
     let builder = PrometheusBuilder::new();
-    let addr = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 19091);
+    let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), sys_config.metric.expose_port);
     builder
         .with_http_listener(addr)
         .idle_timeout(
@@ -16,6 +17,7 @@ pub fn enable_metrics() {
         )
         .install()
         .expect("failed to install Prometheus recorder");
+    info!("prometheus exposed at 0.0.0.0:{}",sys_config.metric.expose_port);
 
     // We register these metrics, which gives us a chance to specify a description for them.  The
     // Prometheus exporter records this description and adds it as HELP text when the endpoint is

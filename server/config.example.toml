@@ -4,6 +4,9 @@ port = 3307
 username = "root"
 password = "root"
 
+[metric]
+expose_port=19091
+
 [mysql]
 ip="127.0.0.1"
 port=3306

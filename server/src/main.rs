@@ -39,10 +39,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let sys_config = sys_config_wrapper.unwrap();
 
-    metrics::enable_metrics();
+    metrics::enable_metrics(sys_config.clone());
     meta::enable_meta_refresh_job(sys_config.clone()).await;
 
-    let r = start(sys_config);
-    info!("MySQL Server Proxy Started.");
+    let r = start(sys_config.clone());
+    info!("virt-db Starting at 0.0.0.0:{}",sys_config.server.port);
     return r.await;
 }
