@@ -1,5 +1,5 @@
-use sea_orm::{IntoActiveModel, NotSet};
 use sea_orm::ActiveValue::Set;
+use sea_orm::{IntoActiveModel, NotSet};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::cache_config;
@@ -31,9 +31,9 @@ pub struct CacheConfigCreateParam {
     pub enabled: Option<i32>,
 }
 
-impl CacheConfigCreateParam{
+impl CacheConfigCreateParam {
     pub fn to_active_model(self) -> ActiveModel {
-        let mut cache_config_entity = ActiveModel{
+        let mut cache_config_entity = ActiveModel {
             ..Default::default()
         };
         cache_config_entity.id = option_to_active_value(self.id);

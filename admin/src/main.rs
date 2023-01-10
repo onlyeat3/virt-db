@@ -1,23 +1,23 @@
-use std::env;
-use std::time::Duration;
+use crate::config::app_config::ApplicationSettings;
+use crate::controller::cache_config_controller;
 use actix_cors::Cors;
 use actix_settings::{ApplySettings as _, BasicSettings};
-use actix_web::{App, get, http, HttpServer, post, Responder, web};
 use actix_web::http::header;
 use actix_web::middleware::{Compress, Condition, Logger};
+use actix_web::{get, http, post, web, App, HttpServer, Responder};
 use env_logger::Env;
 use log::info;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use serde::{de, Deserialize};
-use crate::config::app_config::ApplicationSettings;
-use crate::controller::cache_config_controller;
+use std::env;
+use std::time::Duration;
 
+mod config;
 mod controller;
+mod entity;
+mod error;
 mod model;
 mod utils;
-mod config;
-mod error;
-mod entity;
 
 #[derive(Debug, Clone)]
 struct AppState {
@@ -29,7 +29,7 @@ async fn main() -> std::io::Result<()> {
     // std::env::set_var("RUST_LOG", "info");
     env_logger::init_from_env(Env::default().default_filter_or("info"));
     let settings: BasicSettings<ApplicationSettings> = config::app_config::load_config();
-    env::set_var("DATABASE_URL",settings.application.mysql_url.as_str());
+    env::set_var("DATABASE_URL", settings.application.mysql_url.as_str());
     let mut opt = ConnectOptions::new(settings.application.mysql_url.as_str().to_owned());
     opt.max_connections(100)
         .min_connections(5)
@@ -41,30 +41,27 @@ async fn main() -> std::io::Result<()> {
         .sqlx_logging_level(log::LevelFilter::Info); // Setting default PostgreSQL schema
 
     let conn = Database::connect(opt).await.unwrap();
-    let app_state = AppState{
-        conn,
-    };
+    let app_state = AppState { conn };
 
     let http_server = HttpServer::new({
         let settings = settings.clone();
         move || {
             App::new()
                 .wrap(Logger::default())
-
                 .wrap(Condition::new(
                     settings.actix.enable_compression,
                     Compress::default(),
                 ))
                 .app_data(web::Data::new(settings.clone()))
                 .app_data(web::Data::new(app_state.clone()))
-
-                .wrap(Cors::default()
-                    .allowed_origin("http://localhost:8848")
-                    // .allow_any_origin()
-                    .allow_any_method()
-                    .allow_any_header()
-                    .supports_credentials()
-                    .max_age(3600)
+                .wrap(
+                    Cors::default()
+                        .allowed_origin("http://localhost:8848")
+                        // .allow_any_origin()
+                        .allow_any_method()
+                        .allow_any_header()
+                        .supports_credentials()
+                        .max_age(3600),
                 )
                 .service(controller::index_controller::index)
                 .service(controller::user_controller::login)
@@ -75,8 +72,11 @@ async fn main() -> std::io::Result<()> {
                 .service(cache_config_controller::delete)
         }
     })
-        .apply_settings(&settings)
-        .run();
-    info!("Server Start at http://127.0.0.1:{}", settings.actix.hosts[0].port);
+    .apply_settings(&settings)
+    .run();
+    info!(
+        "Server Start at http://127.0.0.1:{}",
+        settings.actix.hosts[0].port
+    );
     http_server.await
 }

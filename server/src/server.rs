@@ -1,9 +1,9 @@
-use std::fmt::format;
-use crate::mysql_protocol::{MySQL};
-use log::{error};
-use opensrv_mysql::*;
-use tokio::net::TcpListener;
+use crate::mysql_protocol::MySQL;
 use crate::sys_config::VirtDBConfig;
+use log::error;
+use opensrv_mysql::*;
+use std::fmt::format;
+use tokio::net::TcpListener;
 
 pub async fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>> {
     let server_addr = format!("0.0.0.0:{:?}", sys_config.server.port.clone());
@@ -26,9 +26,12 @@ pub async fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::E
             let redis_port = redis_config.port;
             let redis_requirepass = redis_config.requirepass;
 
-            let mysql_url = format!("mysql://{}:{}@{}:{}",mysql_username,mysql_password,mysql_ip,mysql_port);
-            let redis_url = format!("redis://{}@{}:{}",redis_requirepass,redis_ip,redis_port);
-            debug!("mysql_url:{:?},redis_url:{:?}",mysql_url,redis_url);
+            let mysql_url = format!(
+                "mysql://{}:{}@{}:{}",
+                mysql_username, mysql_password, mysql_ip, mysql_port
+            );
+            let redis_url = format!("redis://{}@{}:{}", redis_requirepass, redis_ip, redis_port);
+            debug!("mysql_url:{:?},redis_url:{:?}", mysql_url, redis_url);
             let r = AsyncMysqlIntermediary::run_on(MySQL::new(&*mysql_url, redis_url), r, w).await;
             warn!("mysql end result:{:?}", r);
             return r;

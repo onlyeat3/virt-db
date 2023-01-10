@@ -1,10 +1,10 @@
 #[macro_use]
 use std::error::Error;
+use log::{debug, error, info, trace};
+use serde_derive::Deserialize;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use toml;
-use serde_derive::Deserialize;
-use log::{debug, error, info, trace};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct VirtDBConfig {
@@ -69,9 +69,12 @@ pub async fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Er
         base_dir.to_str().unwrap()
     };
     let real_config_file_path = Path::new(real_config_file);
-    info!("Try read config from file:{:?}",real_config_file_path);
+    info!("Try read config from file:{:?}", real_config_file_path);
     if !real_config_file_path.exists() {
-        error!("Config file:{:?} Not Exists",real_config_file_path.to_path_buf());
+        error!(
+            "Config file:{:?} Not Exists",
+            real_config_file_path.to_path_buf()
+        );
     }
     let toml_str = fs::read_to_string(real_config_file).await?;
     let virt_db_config: VirtDBConfig = toml::from_str(toml_str.as_str()).unwrap();

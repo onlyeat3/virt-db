@@ -1,19 +1,19 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug,Serialize,Deserialize)]
-pub struct LoginReq{
-    pub username:String,
-    pub password:String,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoginReq {
+    pub username: String,
+    pub password: String,
 }
 
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LoginResp{
-    pub access_token:String,
-    pub refresh_token:String,
-    pub expires:String,
-    pub roles:Vec<String>,
-    pub username:String,
+pub struct LoginResp {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires: String,
+    pub roles: Vec<String>,
+    pub username: String,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,5 +1,5 @@
-use actix_web::{get, HttpResponse, Responder};
 use actix_web::web::Json;
+use actix_web::{get, HttpResponse, Responder};
 
 #[get("/getAsyncRoutes")]
 pub async fn get_async_routes() -> actix_web::Result<HttpResponse> {

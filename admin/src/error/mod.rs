@@ -26,20 +26,21 @@ impl actix_web::error::ResponseError for SysError {
 
     fn error_response(&self) -> HttpResponse {
         let error_msg = match self {
-            SysError::BIZ(msg) => { msg }
+            SysError::BIZ(msg) => msg,
             SysError::SYSTEM(err) => {
-                error!("Unknown System Error:{:?}",err);
+                error!("Unknown System Error:{:?}", err);
                 "未知错误"
             }
         };
         let response_body = String::from("{")
             .add("\"code\": -1,")
-            .add("\"message\": \"").add(error_msg).add("\",")
+            .add("\"message\": \"")
+            .add(error_msg)
+            .add("\",")
             .add("\"success\": false,")
             .add("\"data\": null")
             .add("}")
             .to_string();
-
 
         HttpResponse::build(self.status_code())
             .insert_header(ContentType::json())

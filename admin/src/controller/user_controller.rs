@@ -1,23 +1,26 @@
-use actix_settings::{BasicSettings, Settings};
-use actix_web::{get, http, web, App, HttpServer, Responder, post, HttpResponse, ResponseError};
-use actix_web::web::Json;
-use log::info;
-use serde_json::json;
 use crate::config::app_config::ApplicationSettings;
 use crate::error::SysError;
-use crate::model::{CurrentUser, DataWrapper, user_model};
 use crate::model::user_model::{GetUserInfoResp, LoginResp};
+use crate::model::{user_model, CurrentUser, DataWrapper};
 use crate::utils::jwt::encode_token;
+use actix_settings::{BasicSettings, Settings};
+use actix_web::web::Json;
+use actix_web::{get, http, post, web, App, HttpResponse, HttpServer, Responder, ResponseError};
+use log::info;
+use serde_json::json;
 
 #[post("/login")]
-pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Data<BasicSettings<ApplicationSettings>>) -> Result<HttpResponse,SysError> {
+pub async fn login(
+    login_req: web::Json<user_model::LoginReq>,
+    settings: web::Data<BasicSettings<ApplicationSettings>>,
+) -> Result<HttpResponse, SysError> {
     let user_id = 1;
     let user_name = &login_req.username;
     let current_user = CurrentUser {
         user_id,
         user_name: login_req.username.to_string(),
     };
-    let token = encode_token(current_user, 3600*24);
+    let token = encode_token(current_user, 3600 * 24);
     let mut login_resp = LoginResp {
         access_token: token?,
         refresh_token: "".to_string(),
@@ -26,13 +29,12 @@ pub async fn login(login_req: web::Json<user_model::LoginReq>, settings: web::Da
         username: user_name.clone(),
     };
 
-    return Ok(HttpResponse::Ok()
-        .json(DataWrapper::success(login_resp)));
+    return Ok(HttpResponse::Ok().json(DataWrapper::success(login_resp)));
 }
 
 #[get("/getUserInfo")]
 pub async fn get_user_info(current_user: CurrentUser) -> impl Responder {
-    info!("current_user:{:?}",current_user);
+    info!("current_user:{:?}", current_user);
     let get_user_info_resp = GetUserInfoResp {
         user_id: current_user.user_id.to_string(),
         username: current_user.user_name.to_string(),
@@ -44,6 +46,5 @@ pub async fn get_user_info(current_user: CurrentUser) -> impl Responder {
         home_path: "/dashboard/analysis".to_string(),
         roles: vec![String::from("admin")],
     };
-    return HttpResponse::Ok()
-        .json(DataWrapper::success(get_user_info_resp));
+    return HttpResponse::Ok().json(DataWrapper::success(get_user_info_resp));
 }

@@ -1,12 +1,10 @@
 extern crate slab;
 
+use std::fmt;
 use std::sync::Arc;
-use std::{fmt};
 
 use log::{debug, info, trace};
-use mysql_async::{
-    Value,
-};
+use mysql_async::Value;
 use mysql_common::constants::{ColumnFlags, ColumnType};
 use mysql_common::packets as mycp;
 use mysql_common::proto::MySerialize;

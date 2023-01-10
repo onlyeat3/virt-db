@@ -7,14 +7,14 @@ use std::time::SystemTime;
 
 use log::{debug, error, info, trace};
 use metrics::histogram;
-use mysql_async::{Conn, Error, QueryResult, Row, TextProtocol};
 use mysql_async::prelude::Queryable;
+use mysql_async::{Conn, Error, QueryResult, Row, TextProtocol};
 use opensrv_mysql::{
     AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, ParamParser, QueryResultWriter,
     StatementMetaWriter,
 };
-use redis::{AsyncCommands, RedisError, RedisResult};
 use redis::aio::Connection;
+use redis::{AsyncCommands, RedisError, RedisResult};
 use slab::Slab;
 use sqlparser::ast::{SetExpr, Statement};
 use sqlparser::dialect::MySqlDialect;
@@ -186,48 +186,40 @@ pub enum VirtDBMySQLError {
     MySQL_ASYNC(mysql_async::Error),
     Io(io::Error),
     RedisError(redis::RedisError),
-    Other(anyhow::Error)
+    Other(anyhow::Error),
 }
 
-impl VirtDBMySQLError{
-
-    pub async fn handle_or_to_result<'a,W: AsyncWrite + Send + Unpin>(self, results: QueryResultWriter<'a, W>) -> Result<(), VirtDBMySQLError> {
+impl VirtDBMySQLError {
+    pub async fn handle_or_to_result<'a, W: AsyncWrite + Send + Unpin>(
+        self,
+        results: QueryResultWriter<'a, W>,
+    ) -> Result<(), VirtDBMySQLError> {
         match self {
-            VirtDBMySQLError::MySQL_ASYNC(err) => {
-                match err{
-                    Error::Driver(err) => {
-                        Err(VirtDBMySQLError::Other(anyhow::Error::new(err)))
-                    }
-                    Error::Io(err) => {
-                        Err(VirtDBMySQLError::Other(anyhow::Error::new(err)))
-                    }
-                    Error::Other(err) => {
-                        results
-                            .error(ErrorKind::ER_YES, err.to_string().as_bytes())
-                            .await?;
-                        Ok(())
-                    }
-                    Error::Server(err) => {
-                        results
-                            .error(ErrorKind::ER_YES, err.to_string().as_bytes())
-                            .await?;
-                        Ok(())
-                    }
-                    Error::Url(err) => {
-                        Err(VirtDBMySQLError::Other(anyhow::Error::new(err)))
-                    }
+            VirtDBMySQLError::MySQL_ASYNC(err) => match err {
+                Error::Driver(err) => Err(VirtDBMySQLError::Other(anyhow::Error::new(err))),
+                Error::Io(err) => Err(VirtDBMySQLError::Other(anyhow::Error::new(err))),
+                Error::Other(err) => {
+                    results
+                        .error(ErrorKind::ER_YES, err.to_string().as_bytes())
+                        .await?;
+                    Ok(())
                 }
-            }
-            VirtDBMySQLError::Io(err) => {
-                Err(VirtDBMySQLError::Io(err))
-            }
+                Error::Server(err) => {
+                    results
+                        .error(ErrorKind::ER_YES, err.to_string().as_bytes())
+                        .await?;
+                    Ok(())
+                }
+                Error::Url(err) => Err(VirtDBMySQLError::Other(anyhow::Error::new(err))),
+            },
+            VirtDBMySQLError::Io(err) => Err(VirtDBMySQLError::Io(err)),
             VirtDBMySQLError::RedisError(err) => {
                 results
                     .error(ErrorKind::ER_YES, err.to_string().as_bytes())
                     .await?;
                 Ok(())
             }
-            VirtDBMySQLError::Other(err)=>{
+            VirtDBMySQLError::Other(err) => {
                 results
                     .error(ErrorKind::ER_YES, err.to_string().as_bytes())
                     .await?;
