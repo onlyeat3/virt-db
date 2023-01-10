@@ -23,7 +23,7 @@ use crate::model::cache_config_model::{CacheConfigCreateParam, CacheConfigListPa
 use crate::model::{cache_config_model, CurrentUser, DataWrapper, IdParam, PageResponse};
 
 #[post("/cache_config/list")]
-async fn list(
+pub(crate) async fn list(
     req: web::Json<CacheConfigListParam>,
     app_state: Data<AppState>,
     current_user: CurrentUser,
@@ -66,7 +66,7 @@ async fn list(
 }
 
 #[post("/cache_config/createOrUpdate")]
-async fn create(
+pub(crate) async fn create(
     req: web::Json<CacheConfigCreateParam>,
     app_state: Data<AppState>,
     current_user: CurrentUser,
@@ -82,7 +82,7 @@ async fn create(
 }
 
 #[post("/cache_config/delete")]
-async fn delete(
+pub(crate) async fn delete(
     req: web::Json<IdParam>,
     app_state: Data<AppState>,
     current_user: CurrentUser,
