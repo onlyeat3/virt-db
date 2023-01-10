@@ -1,28 +1,29 @@
 extern crate slab;
 
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::time::SystemTime;
 
 use log::{debug, error, info, trace};
 use metrics::histogram;
-use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Error, QueryResult, Row, TextProtocol};
-use redis::aio::Connection;
-use redis::{AsyncCommands, RedisError, RedisResult};
-use slab::Slab;
-use sqlparser::ast::{SetExpr, Statement};
-use sqlparser::dialect::MySqlDialect;
-use sqlparser::parser::{Parser, ParserError};
-
-use crate::meta;
-use crate::meta::CacheConfigEntity;
+use mysql_async::prelude::Queryable;
 use opensrv_mysql::{
     AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, ParamParser, QueryResultWriter,
     StatementMetaWriter,
 };
+use redis::{AsyncCommands, RedisError, RedisResult};
+use redis::aio::Connection;
+use slab::Slab;
+use sqlparser::ast::{SetExpr, Statement};
+use sqlparser::dialect::MySqlDialect;
+use sqlparser::parser::{Parser, ParserError};
 use sqlparser::tokenizer::{Token, Tokenizer};
 use tokio::io::AsyncWrite;
+
+use crate::meta;
+use crate::meta::CacheConfigEntity;
 
 pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bool {
     let tokens1: Vec<Token> = Tokenizer::new(dialect, pattern)
@@ -185,6 +186,55 @@ pub enum VirtDBMySQLError {
     MySQL_ASYNC(mysql_async::Error),
     Io(io::Error),
     RedisError(redis::RedisError),
+    Other(anyhow::Error)
+}
+
+impl VirtDBMySQLError{
+
+    pub async fn handle_or_to_result<'a,W: AsyncWrite + Send + Unpin>(self, results: QueryResultWriter<'a, W>) -> Result<(), VirtDBMySQLError> {
+        match self {
+            VirtDBMySQLError::MySQL_ASYNC(err) => {
+                match err{
+                    Error::Driver(err) => {
+                        Err(VirtDBMySQLError::Other(anyhow::Error::new(err)))
+                    }
+                    Error::Io(err) => {
+                        Err(VirtDBMySQLError::Other(anyhow::Error::new(err)))
+                    }
+                    Error::Other(err) => {
+                        results
+                            .error(ErrorKind::ER_YES, err.to_string().as_bytes())
+                            .await?;
+                        Ok(())
+                    }
+                    Error::Server(err) => {
+                        results
+                            .error(ErrorKind::ER_YES, err.to_string().as_bytes())
+                            .await?;
+                        Ok(())
+                    }
+                    Error::Url(err) => {
+                        Err(VirtDBMySQLError::Other(anyhow::Error::new(err)))
+                    }
+                }
+            }
+            VirtDBMySQLError::Io(err) => {
+                Err(VirtDBMySQLError::Io(err))
+            }
+            VirtDBMySQLError::RedisError(err) => {
+                results
+                    .error(ErrorKind::ER_YES, err.to_string().as_bytes())
+                    .await?;
+                Ok(())
+            }
+            VirtDBMySQLError::Other(err)=>{
+                results
+                    .error(ErrorKind::ER_YES, err.to_string().as_bytes())
+                    .await?;
+                Ok(())
+            }
+        }
+    }
 }
 
 impl From<io::Error> for VirtDBMySQLError {
@@ -211,6 +261,7 @@ impl VirtDBMySQLError {
             VirtDBMySQLError::MySQL_ASYNC(mysql_async_err) => mysql_async_err.to_string(),
             VirtDBMySQLError::Io(err) => err.to_string(),
             VirtDBMySQLError::RedisError(err) => err.to_string(),
+            VirtDBMySQLError::Other(err) => err.to_string(),
         };
     }
 }
@@ -220,7 +271,7 @@ impl MySQL {
         &'a mut self,
         sql: &str,
     ) -> Result<MySQLResult, VirtDBMySQLError> {
-        trace!("sql:{}", sql);
+        debug!("sql:{}", sql);
         let redis_key = format!("cache:{:?}", sql);
         let cache_config_entity_list = meta::get_cache_config_entity_list();
 
@@ -237,10 +288,6 @@ impl MySQL {
             }
         }
         if cache_config_entity_option.is_some() {
-            // let select_expr = select_expr_box.as_ref();
-            // for table in &select_expr.from {
-            //     info!("table:{:?}", table);
-            // }
             let redis_conn = self.get_redis_connection().await?;
             let cached_value_result: Result<String, RedisError> =
                 redis_conn.get(redis_key.clone()).await;
@@ -278,7 +325,6 @@ impl MySQL {
 
         let rows = query_result.collect::<Row>().await?;
         let mysql_result = MySQLResult { cols, rows };
-        let rows: Vec<Row> = query_result.flatten().collect();
 
         if let Some(cache_config_entity) = cache_config_entity_option {
             let json_v = serde_json::to_string(&mysql_result).unwrap_or_default();
@@ -438,10 +484,7 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
                 Ok(writer.finish().await?)
             }
             Err(mut e) => {
-                results
-                    .error(ErrorKind::ER_YES, e.to_string().as_bytes())
-                    .await?;
-                Ok(())
+                return e.handle_or_to_result(results).await;
             }
         };
     }

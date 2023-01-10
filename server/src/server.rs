@@ -14,6 +14,7 @@ pub async fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::E
 
         let mysql_config = sys_config.mysql.clone();
         let redis_config = sys_config.redis.clone();
+
         tokio::spawn(async move {
             //TODO pool mysql+redis ?
             let mysql_username = mysql_config.username;
@@ -27,9 +28,9 @@ pub async fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::E
 
             let mysql_url = format!("mysql://{}:{}@{}:{}",mysql_username,mysql_password,mysql_ip,mysql_port);
             let redis_url = format!("redis://{}@{}:{}",redis_requirepass,redis_ip,redis_port);
-            info!("mysql_url:{:?},redis_url:{:?}",mysql_url,redis_url);
+            debug!("mysql_url:{:?},redis_url:{:?}",mysql_url,redis_url);
             let r = AsyncMysqlIntermediary::run_on(MySQL::new(&*mysql_url, redis_url), r, w).await;
-            trace!("mysql end result:{:?}", r);
+            warn!("mysql end result:{:?}", r);
             return r;
         });
     }
