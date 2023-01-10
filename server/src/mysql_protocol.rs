@@ -281,18 +281,18 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for MySQL {
         }
 
         let auth_data = _auth_data;
-        let encoded_password =
+        let encrypted_password =
             scramble_native(_salt, self.server_config.password.as_bytes()).unwrap_or_default();
         let username = String::from_utf8_lossy(_username).to_string();
         let salt = String::from_utf8_lossy(_salt).to_string();
-        info!(
-            "username:{:?},_auth_data:{:?},sha1 'root':{:?},equals:{:?}",
+        trace!(
+            "username:{:?},_auth_data:{:?},password sha1:{:?},equals:{:?}",
             username,
             auth_data,
-            encoded_password,
-            encoded_password == auth_data
+            encrypted_password,
+            encrypted_password == auth_data
         );
-        return encoded_password == auth_data;
+        return encrypted_password == auth_data;
     }
 
     async fn on_prepare<'a>(
