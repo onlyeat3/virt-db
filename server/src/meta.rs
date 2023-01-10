@@ -71,7 +71,7 @@ pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
             set_cache_config_entity_list(cache_config_list);
             debug!("reload cache_config_list finish");
 
-            time::sleep(Duration::from_secs(10)).await;
+            time::sleep(Duration::from_secs(meta_config.refresh_duration_in_seconds)).await;
         }
     });
 }

@@ -57,6 +57,7 @@ pub struct MetaDbConfig {
     pub username: String,
     pub password: String,
     pub database: String,
+    pub refresh_duration_in_seconds: u64,
 }
 
 pub async fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Error> {
