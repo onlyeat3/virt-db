@@ -50,7 +50,9 @@ pub async fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::E
                 w,
             )
             .await;
-            warn!("mysql end result:{:?}", r);
+            if r.is_err() {
+                warn!("mysql connection finished with error:{:?}", r);
+            }
             return r;
         });
     }
