@@ -12,22 +12,7 @@ pub async fn get_async_routes() -> actix_web::Result<HttpResponse> {
 			"icon": "lollipop",
 			"rank": 10
 		},
-		"children": [{
-			"path": "/permission/page/index",
-			"name": "PermissionPage",
-			"meta": {
-				"title": "menus.permissionPage",
-				"roles": ["admin", "common"]
-			}
-		}, {
-			"path": "/permission/button/index",
-			"name": "PermissionButton",
-			"meta": {
-				"title": "menus.permissionButton",
-				"roles": ["admin", "common"],
-				"auths": ["btn_add", "btn_edit", "btn_delete"]
-			}
-		}]
+		"children": []
 	}]
 }"#;
     Ok(HttpResponse::Ok()
