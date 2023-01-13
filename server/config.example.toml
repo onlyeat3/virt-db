@@ -4,6 +4,9 @@ port = 3307
 username = "root"
 password = "root"
 
+[admin]
+address="http://127.0.0.1:8080"
+
 [metric]
 expose_port=19091
 

@@ -18,7 +18,7 @@ pub async fn enable_vt_node_alive_check(app_state: AppState) {
         loop {
             interval.tick().await;
             let mut vt_nodes = app_state.vt_nodes_lock.lock().await;
-            vt_nodes.retain(|key,expire_at|{
+            vt_nodes.retain(|_,expire_at|{
                 &Local::now() < expire_at
             });
             for entry in vt_nodes.iter() {

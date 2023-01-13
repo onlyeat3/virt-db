@@ -9,6 +9,7 @@ use toml;
 #[derive(Debug, Deserialize, Clone)]
 pub struct VirtDBConfig {
     pub server: ServerConfig,
+    pub admin: AdminConfig,
     pub metric: MetricConfig,
     pub mysql: BackendMySQLServerConfig,
     pub redis: RedisServerConfig,
@@ -25,6 +26,12 @@ pub struct ServerConfig {
     pub username: String,
     //客户端链接密码
     pub password: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AdminConfig {
+    //是否开发模式
+    pub address: String,
 }
 
 /**

@@ -18,6 +18,7 @@ mod server;
 mod sys_config;
 mod sys_log;
 mod utils;
+mod sys_job;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -42,6 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     metrics::enable_metrics(sys_config.clone());
     meta::enable_meta_refresh_job(sys_config.clone()).await;
+    sys_job::enable_node_live_refresh_job(sys_config.clone()).await;
 
     let r = start(sys_config.clone());
     info!("virt-db Starting at 0.0.0.0:{}",sys_config.server.port);
