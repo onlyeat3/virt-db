@@ -29,7 +29,7 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
             };
         })
         .collect();
-    trace!("tokens1:{:?}\ntokens2:{:?}\ntokens1.len:{:?},tokens2.len:{:?}", tokens1, tokens2, tokens1.len(), tokens2.len());
+    println!("tokens1:{:?}\ntokens2:{:?}\ntokens1.len:{:?},tokens2.len:{:?}", tokens1, tokens2, tokens1.len(), tokens2.len());
     if tokens1.len() != tokens2.len() {
         return false;
     }
@@ -37,7 +37,7 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
     for index in 0..tokens1.len() {
         let a = &tokens1[index];
         let b = &tokens2[index];
-        trace!("sql match token pair. a:{:?},b:{:?}", a, b);
+        println!("sql match token pair. a:{:?},b:{:?}", a, b);
         let is_same = match (a, b) {
             (Token::Word(v_a), Token::Word(v_b)) => {
                 v_a.value == v_b.value
@@ -63,7 +63,10 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
             (Token::Whitespace(v_a), Token::Whitespace(v_b)) => {
                 true
             }
-            (Token::Placeholder(v_a), Token::Placeholder(v_b)) => {
+            (Token::Placeholder(v_a), v) => {
+                true
+            }
+            (v,Token::Placeholder(v_a)) => {
                 true
             }
             _ => {
@@ -71,7 +74,7 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
             }
         };
         if !is_same {
-            trace!("a != b,return");
+            println!("a != b,return");
             return false;
         }
     }
@@ -81,14 +84,11 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
 
 #[test]
 fn test_match() {
-    let env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "trace");
-    env_logger::Builder::from_env(env)
-        .build();
-    let sql = "SELECT * FROM article limit 1000,10;";
-    let pattern = "SELECT * FROM `article` limit 1000,10;";
+    let sql = "SELECT * FROM article where article_id = 116728608290413363";
+    let pattern = "SELECT * FROM article where article_id = ?";
     let dialect = MySqlDialect {}; // or AnsiDialect, or your own dialect ...
     let matched = is_pattern_match(sql, pattern, &dialect);
-    trace!("pattern:{:?}\nsql:{:?}\neq:{:?}", pattern, sql, matched);
+    println!("pattern:{:?}\nsql:{:?}\neq:{:?}", pattern, sql, matched);
 }
 
 #[test]
