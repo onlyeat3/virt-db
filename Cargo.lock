@@ -235,12 +235,14 @@ dependencies = [
  "chrono",
  "env_logger 0.10.0",
  "futures",
+ "incr",
  "jsonwebtoken",
  "log",
  "mysql",
  "sea-orm",
  "serde",
  "serde_json",
+ "tokio 1.23.0",
 ]
 
 [[package]]
@@ -1684,6 +1686,12 @@ dependencies = [
  "unicode-bidi",
  "unicode-normalization",
 ]
+
+[[package]]
+name = "incr"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c1c657ea92c64877b95b0e4df255408f9565d804d1ea53714bde82b9ec23b73"
 
 [[package]]
 name = "indexmap"

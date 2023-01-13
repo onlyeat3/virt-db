@@ -18,6 +18,7 @@ use crate::utils;
 
 pub mod cache_config_model;
 pub mod user_model;
+pub mod vt_model;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataWrapper<V> {
