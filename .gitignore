@@ -2,3 +2,4 @@
 *.iml
 .idea/
 server/config.toml
+Cargo.lock
