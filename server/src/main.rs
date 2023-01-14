@@ -1,24 +1,28 @@
+#![feature(array_chunks)]
+#![feature(drain_filter)]
 #![allow(unused_imports,dead_code)]
 #[macro_use]
 extern crate log;
 extern crate core;
 extern crate tokio;
+extern crate lazy_static;
 
 use clap::{AppSettings, Parser};
 use log::{error, info};
 use std::error::Error;
 
 use crate::server::start;
+use crate::sys_metrics::enable_node_live_refresh_job;
 
 mod meta;
-mod metrics;
+mod sys_metrics;
 mod mysql_protocol;
 mod serde;
 mod server;
 mod sys_config;
 mod sys_log;
 mod utils;
-mod sys_job;
+mod math;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -41,9 +45,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let sys_config = sys_config_wrapper.unwrap();
 
-    metrics::enable_metrics(sys_config.clone());
+    sys_metrics::enable_metrics(sys_config.clone());
     meta::enable_meta_refresh_job(sys_config.clone()).await;
-    sys_job::enable_node_live_refresh_job(sys_config.clone()).await;
+    enable_node_live_refresh_job(sys_config.clone()).await;
 
     let r = start(sys_config.clone());
     info!("virt-db Starting at 0.0.0.0:{}",sys_config.server.port);

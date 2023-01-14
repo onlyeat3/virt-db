@@ -1,7 +1,39 @@
-#![allow(unused_imports,unused_variables)]
+#![allow(unused_imports, unused_variables)]
+
 use std::collections::HashMap;
-use sqlparser::dialect::MySqlDialect;
+
+use sqlparser::dialect::{Dialect, MySqlDialect};
+use sqlparser::parser::Parser;
 use sqlparser::tokenizer::{Token, Tokenizer};
+
+pub fn normally(dialect: &dyn Dialect, sql: &str) -> String {
+    let mut tokenizer = Tokenizer::new(dialect, &*sql);
+    let tokens: Vec<Token> = tokenizer.tokenize().unwrap();
+    return tokens.iter()
+        .map(|x| {
+            match x {
+                Token::EOF => { "".to_string() }
+                Token::Whitespace(_) => { "".to_string() }
+                _ => {
+                    format!("{}", x)
+                }
+            }
+        })
+        .reduce(|a, b| {
+            if a == "" || b == ""
+                || a == "." || b == "."
+                || a == "," || b == ","
+                || a == "(" || b == "("
+                || a == ")" || b == ")"
+            {
+                format!("{}{}", a, b)
+            } else {
+                format!("{} {}", a, b)
+            }
+        })
+        .unwrap_or(sql.to_string());
+}
+
 
 pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bool {
     let tokens1: Vec<Token> = Tokenizer::new(dialect, pattern)
@@ -66,7 +98,7 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
             (Token::Placeholder(v_a), v) => {
                 true
             }
-            (v,Token::Placeholder(v_a)) => {
+            (v, Token::Placeholder(v_a)) => {
                 true
             }
             _ => {
@@ -123,4 +155,19 @@ fn test_matchs() {
         println!("pattern:{:?}\nsql:{:?}\neq:{:?}\n", pattern, sql, matched);
         assert_eq!(true, matched);
     }
+}
+
+
+#[test]
+fn test_sql_verify() {
+    let sql = r#" SELECT zu.id,zu.account,zu.realname,
+
+ (
+	select GROUP_CONCAT(zg.`name` separator ',') from zt_group zg join zt_usergroup zug on zg.id = zug.`group` where zug.account = zu.account
+ )
+	from zt_user zu
+ "#;
+    let dialect = &MySqlDialect {};
+    let normally_sql = normally(dialect, sql);
+    assert_ne!(sql, normally_sql)
 }

@@ -34,6 +34,8 @@ metrics-util = "0.14.0"
 rand = "0.8.5"
 
 async-once-cell = "0.4.2"
+once_cell = "1.17.0"
+lazy_static = "1.4.0"
 
 serde_derive = "1.0.152"
 toml = "0.5.10"
@@ -41,3 +43,4 @@ anyhow = "1.0.68"
 sha1 = "0.10.5"
 
 reqwest = { version = "0.11", features = ["json"] }
+itertools = "0.10.5"

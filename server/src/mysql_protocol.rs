@@ -5,10 +5,11 @@ use std::collections::HashMap;
 use std::io;
 use std::time::SystemTime;
 
+use chrono::Local;
 use log::{debug, trace};
 use metrics::histogram;
-use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Error, QueryResult, Row, TextProtocol};
+use mysql_async::prelude::Queryable;
 use mysql_common::packets::AuthPluginData;
 use mysql_common::scramble::scramble_native;
 use nom::AsBytes;
@@ -16,17 +17,19 @@ use opensrv_mysql::{
     AsyncMysqlShim, Column, ColumnFlags, ErrorKind, InitWriter, ParamParser, QueryResultWriter,
     StatementMetaWriter,
 };
-use redis::aio::Connection;
 use redis::{AsyncCommands, RedisError, RedisResult};
+use redis::aio::Connection;
 use sha1::{Digest, Sha1};
 use slab::Slab;
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::tokenizer::{Token, Tokenizer};
 use tokio::io::AsyncWrite;
 
+use crate::{meta, sys_config, sys_metrics, utils};
 use crate::meta::CacheConfigEntity;
 use crate::sys_config::ServerConfig;
-use crate::{meta, sys_config, utils};
+use crate::sys_metrics::ExecLog;
+use crate::utils::normally;
 
 // this is where the proxy server implementation starts
 
@@ -184,6 +187,12 @@ impl MySQL {
         &'a mut self,
         sql: &str,
     ) -> Result<MySQLResult, VirtDBMySQLError> {
+        let sql_str = normally(&self.dialect,sql);
+        let mut mysql_duration = 0;
+        let mut redis_duration = 0;
+        let mut from_cache = false;
+        let fn_start_time = Local::now();
+
         debug!("sql:{}", sql);
         let redis_key = format!("cache:{:?}", sql);
         let cache_config_entity_list = meta::get_cache_config_entity_list();
@@ -201,12 +210,26 @@ impl MySQL {
             }
         }
         if cache_config_entity_option.is_some() {
+            let redis_get_start_time = Local::now();
             let redis_conn = self.get_redis_connection().await?;
             let cached_value_result: Result<String, RedisError> =
                 redis_conn.get(redis_key.clone()).await;
+
+            redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+
             if let Ok(redis_v) = cached_value_result {
+                from_cache = true;
+
                 let mysql_result: MySQLResult = serde_json::from_str(&*redis_v).unwrap();
                 trace!("decoded_v:{:?}", mysql_result);
+
+                sys_metrics::record_exec_log(ExecLog {
+                    sql_str,
+                    total_duration: (Local::now() - fn_start_time).num_milliseconds(),
+                    mysql_duration,
+                    redis_duration,
+                    from_cache,
+                }).await;
                 return Ok(mysql_result);
             }
         }
@@ -214,6 +237,9 @@ impl MySQL {
         // let query_result_result: Result<QueryResult<TextProtocol>, Error> =
         //     self.connection.query_iter(String::from(sql)).await;
         let mysql_conn = self.get_mysql_connection().await?;
+
+        let mysql_query_start_time = Local::now();
+
         let mut query_result: QueryResult<TextProtocol> =
             mysql_conn.query_iter(String::from(sql)).await?;
         trace!("v:{:?}", query_result);
@@ -239,6 +265,8 @@ impl MySQL {
         let rows = query_result.collect::<Row>().await?;
         let mysql_result = MySQLResult { cols, rows };
 
+        mysql_duration = (Local::now() - mysql_query_start_time).num_milliseconds();
+
         if let Some(cache_config_entity) = cache_config_entity_option {
             let json_v = serde_json::to_string(&mysql_result).unwrap_or_default();
             trace!("json_v:{}", json_v);
@@ -253,7 +281,14 @@ impl MySQL {
                 .await;
             trace!("redis set. key:{:?},result:{:?}", redis_key, rv);
         }
-        Ok(mysql_result)
+        sys_metrics::record_exec_log(ExecLog {
+            sql_str,
+            total_duration: (Local::now() - fn_start_time).num_milliseconds(),
+            mysql_duration,
+            redis_duration,
+            from_cache,
+        }).await;
+        return Ok(mysql_result);
     }
 }
 
