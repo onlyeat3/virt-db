@@ -40,13 +40,14 @@ pub struct ExecLog {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MetricHistory {
     pub sql_str: String,
-    db_server_port: String,
-    database_name: String,
-    avg_duration: i32,
-    max_duration: i64,
-    exec_count: usize,
-    cache_hit_count: i32,
-    created_at: i64,
+    pub db_server_port: String,
+    pub database_name: String,
+    pub avg_duration: i32,
+    pub max_duration: i64,
+    pub min_duration: i64,
+    pub exec_count: usize,
+    pub cache_hit_count: i32,
+    pub created_at: i64,
 }
 
 static EXEC_LOG_LIST_MUTEX: Lazy<Mutex<Vec<ExecLog>>> = Lazy::new(|| {
@@ -126,6 +127,7 @@ pub async fn enable_node_live_refresh_job(sys_config: VirtDBConfig) {
                 .map(|(sql_str, group)| {
                     let mut avg_calculator = AveragedCollection::new();
                     let mut max_duration = -1;
+                    let mut min_duration = i64::MAX;
                     let mut cache_hit_count = 0;
                     let mut total_count = 0;
                     let list = group.into_iter()
@@ -137,6 +139,10 @@ pub async fn enable_node_live_refresh_job(sys_config: VirtDBConfig) {
                         if max_duration < exec_log.total_duration {
                             max_duration = exec_log.total_duration;
                         }
+                        if min_duration > exec_log.total_duration {
+                            min_duration = exec_log.total_duration;
+                        }
+
                         if exec_log.from_cache {
                             cache_hit_count += 1;
                         }
@@ -149,6 +155,7 @@ pub async fn enable_node_live_refresh_job(sys_config: VirtDBConfig) {
                         database_name: "".to_string(),//TODO
                         avg_duration: avg_calculator.average() as i32,
                         max_duration,
+                        min_duration,
                         exec_count: total_count,
                         cache_hit_count: cache_hit_count as i32,
                         created_at: Local::now().timestamp(),

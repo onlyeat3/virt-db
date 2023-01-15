@@ -1,0 +1,1 @@
+`sea-orm-cli generate entity -u mysql://root:root@localhost:3306/virt-db-meta -o src/entity --with-copy-enums --with-serde both`
