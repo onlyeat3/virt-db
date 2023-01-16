@@ -10,7 +10,7 @@ use actix_settings::{BasicSettings, Settings};
 use actix_web::{HttpRequest, HttpResponse, post, web};
 use actix_web::web::Data;
 use anyhow::Error;
-use chrono::{DateTime, Duration, Local, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, Local, NaiveDateTime, TimeZone, Utc};
 use log::info;
 use sea_orm::ActiveModelTrait;
 use sea_orm::ActiveValue::Set;
@@ -44,7 +44,7 @@ pub async fn register(req_param: web::Json<vt_model::VtNodeRegisterParam>,
 
     for x in &req_param.metric_history_list {
         let x = x.clone();
-        let created_at = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp_opt(x.created_at, 0).unwrap_or_default(), Utc);
+        let created_at = Local.timestamp_millis_opt(x.created_at*1000).unwrap();
         let _ = ActiveModel {
             id: Default::default(),
             sql_str: Set(x.sql_str),

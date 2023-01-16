@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use crate::config::app_config::ApplicationSettings;
-use crate::controller::{cache_config_controller, vt_node_controller};
+use crate::controller::{cache_config_controller, metric_history_controller, vt_node_controller};
 use actix_cors::Cors;
 use actix_settings::{ApplySettings as _, BasicSettings};
 use actix_web::http::header;
@@ -85,6 +85,7 @@ async fn main() -> std::io::Result<()> {
                 .service(cache_config_controller::create)
                 .service(cache_config_controller::delete)
                 .service(vt_node_controller::register)
+                .service(metric_history_controller::list_sql)
         }
     })
     .apply_settings(&settings)

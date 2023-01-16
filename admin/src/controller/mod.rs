@@ -3,3 +3,4 @@ pub mod index_controller;
 pub mod mock_controller;
 pub mod user_controller;
 pub mod vt_node_controller;
+pub mod metric_history_controller;

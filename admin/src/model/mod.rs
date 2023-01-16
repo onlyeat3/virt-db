@@ -19,6 +19,7 @@ use crate::utils;
 pub mod cache_config_model;
 pub mod user_model;
 pub mod vt_model;
+pub mod metric;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataWrapper<V> {
@@ -75,7 +76,7 @@ impl PageParam {
         if page_no > 0 {
             page_no = page_no - 1
         }
-        page_no
+        page_no.clone()
     }
     pub fn get_start_row(self) -> u64 {
         let page_no = self.clone().get_page_no();
@@ -84,7 +85,7 @@ impl PageParam {
     }
 
     pub fn get_limit(self) -> u64 {
-        self.page_size.unwrap_or(10) as u64
+        (self.page_size.unwrap_or(10) as u64).clone()
     }
 }
 
