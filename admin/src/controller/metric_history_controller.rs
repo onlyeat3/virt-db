@@ -117,54 +117,54 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
             .await
             .map_err(anyhow::Error::new)
             ?;
-        for x in query_result_vec {
-            let max_duration:i64 = x.try_get("","max_duration").unwrap();
-            let min_duration:i64 = x.try_get("","min_duration").unwrap();
-            let exec_count:Decimal = x.try_get("","exec_count").unwrap();
-            let cache_hit_count:Decimal = x.try_get("","cache_hit_count").unwrap();
-            let avg_duration:Decimal = x.try_get("","avg_duration").unwrap();
-            let date:String = x.try_get("","date").unwrap();
-            info!("date:{:?},avg_duration:{:?},max_duration:{:?},min_duration:{:?},exec_count:{:?},cache_hit_count:{:?}",date,avg_duration,max_duration,min_duration,exec_count,cache_hit_count)
-        }
-        //
-        // let avg_durations: Vec<Decimal> = query_result_vec.iter()
-        //     .map(|x| x.try_get("", "avg_duration"))
-        //     .filter(|x| x.is_ok())
-        //     .map(|x| x.unwrap())
-        //     .collect();
-        // let max_durations: Vec<i64> = query_result_vec.iter()
-        //     .map(|x| x.try_get("", "max_duration"))
-        //     .filter(|x| x.is_ok())
-        //     .map(|x| x.unwrap())
-        //     .collect();
-        // let min_durations: Vec<i64> = query_result_vec.iter()
-        //     .map(|x| x.try_get("", "min_duration"))
-        //     .filter(|x| x.is_ok())
-        //     .map(|x| x.unwrap())
-        //     .collect();
-        //
-        // let exec_counts: Vec<Decimal> = query_result_vec.iter()
-        //     .map(|x| x.try_get("", "exec_count"))
-        //     .filter(|x| x.is_ok())
-        //     .map(|x| x.unwrap())
-        //     .collect();
-        // let cache_hit_counts: Vec<Decimal> = query_result_vec.iter()
-        //     .map(|x| x.try_get("", "cache_hit_count"))
-        //     .filter(|x| x.is_ok())
-        //     .map(|x| x.unwrap())
-        //     .collect();
-        // let dates: Vec<String> = query_result_vec.iter()
-        //     .map(|x| x.try_get("", "date"))
-        //     .filter(|x| x.is_ok())
-        //     .map(|x| x.unwrap())
-        //     .collect();
-        // x.avg_durations = avg_durations;
-        // x.min_durations = min_durations;
-        // x.max_durations = max_durations;
-        // x.exec_counts = exec_counts;
-        // x.cache_hit_counts = cache_hit_counts;
-        // x.dates = dates;
-        // final_metric_result_vec.push(x);
+        // for x in query_result_vec {
+        //     let max_duration:i64 = x.try_get("","max_duration").unwrap();
+        //     let min_duration:i64 = x.try_get("","min_duration").unwrap();
+        //     let exec_count:Decimal = x.try_get("","exec_count").unwrap();
+        //     let cache_hit_count:Decimal = x.try_get("","cache_hit_count").unwrap();
+        //     let avg_duration:Decimal = x.try_get("","avg_duration").unwrap();
+        //     let date:String = x.try_get("","date").unwrap();
+        //     info!("date:{:?},avg_duration:{:?},max_duration:{:?},min_duration:{:?},exec_count:{:?},cache_hit_count:{:?}",date,avg_duration,max_duration,min_duration,exec_count,cache_hit_count)
+        // }
+
+        let avg_durations: Vec<Decimal> = query_result_vec.iter()
+            .map(|x| x.try_get("", "avg_duration"))
+            .filter(|x| x.is_ok())
+            .map(|x| x.unwrap())
+            .collect();
+        let max_durations: Vec<i64> = query_result_vec.iter()
+            .map(|x| x.try_get("", "max_duration"))
+            .filter(|x| x.is_ok())
+            .map(|x| x.unwrap())
+            .collect();
+        let min_durations: Vec<i64> = query_result_vec.iter()
+            .map(|x| x.try_get("", "min_duration"))
+            .filter(|x| x.is_ok())
+            .map(|x| x.unwrap())
+            .collect();
+
+        let exec_counts: Vec<Decimal> = query_result_vec.iter()
+            .map(|x| x.try_get("", "exec_count"))
+            .filter(|x| x.is_ok())
+            .map(|x| x.unwrap())
+            .collect();
+        let cache_hit_counts: Vec<Decimal> = query_result_vec.iter()
+            .map(|x| x.try_get("", "cache_hit_count"))
+            .filter(|x| x.is_ok())
+            .map(|x| x.unwrap())
+            .collect();
+        let dates: Vec<String> = query_result_vec.iter()
+            .map(|x| x.try_get("", "date"))
+            .filter(|x| x.is_ok())
+            .map(|x| x.unwrap())
+            .collect();
+        x.avg_durations = avg_durations;
+        x.min_durations = min_durations;
+        x.max_durations = max_durations;
+        x.exec_counts = exec_counts;
+        x.cache_hit_counts = cache_hit_counts;
+        x.dates = dates;
+        final_metric_result_vec.push(x);
     }
     let data_wrapper = DataWrapper::success(PageResponse {
         list: final_metric_result_vec,
