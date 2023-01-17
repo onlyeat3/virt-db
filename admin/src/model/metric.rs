@@ -6,6 +6,7 @@ use serde::{Serialize,Deserialize};
 #[serde(rename_all = "camelCase")]
 pub struct MetricQueryParam{
     pub page_param: PageParam,
+    pub sql:Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

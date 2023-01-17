@@ -19,9 +19,19 @@ use crate::model::metric::{MetricQueryParam, MetricResult};
 #[post("/metric/list_sql")]
 pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppState>) -> Result<HttpResponse, SysError> {
     let conn = &app_state.conn;
-    let sql = r#"select sql_str from metric_history group by sql_str"#;
+    let mut query_params = vec![];
+    let sql = match &metric_param.sql {
+        None => {
+            r#"select sql_str from metric_history group by sql_str"#
+        }
+        Some(sql_condition) => {
+            let condition = Value::String(Some(Box::new(sql_condition.to_owned())));
+            query_params.push(condition);
+            r#"select sql_str from metric_history where sql_str like concat('%',?,'%') group by sql_str"#
+        }
+    };
     let page_param = metric_param.page_param.clone();
-    let paginator = JsonValue::find_by_statement(Statement::from_sql_and_values(DatabaseBackend::MySql, sql, vec![]))
+    let paginator = JsonValue::find_by_statement(Statement::from_sql_and_values(DatabaseBackend::MySql, sql, query_params))
         .paginate(conn, page_param.clone().get_limit());
     let total = paginator.num_items_and_pages()
         .await

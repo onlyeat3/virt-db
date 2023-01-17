@@ -61,7 +61,7 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
             };
         })
         .collect();
-    println!("tokens1:{:?}\ntokens2:{:?}\ntokens1.len:{:?},tokens2.len:{:?}", tokens1, tokens2, tokens1.len(), tokens2.len());
+    info!("tokens1:{:?}\ntokens2:{:?}\ntokens1.len:{:?},tokens2.len:{:?}", tokens1, tokens2, tokens1.len(), tokens2.len());
     if tokens1.len() != tokens2.len() {
         return false;
     }
@@ -69,7 +69,7 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
     for index in 0..tokens1.len() {
         let a = &tokens1[index];
         let b = &tokens2[index];
-        println!("sql match token pair. a:{:?},b:{:?}", a, b);
+        info!("sql match token pair. a:{:?},b:{:?}", a, b);
         let is_same = match (a, b) {
             (Token::Word(v_a), Token::Word(v_b)) => {
                 v_a.value == v_b.value
@@ -106,7 +106,7 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
             }
         };
         if !is_same {
-            println!("a != b,return");
+            info!("a != b,return");
             return false;
         }
     }
@@ -120,7 +120,7 @@ fn test_match() {
     let pattern = "SELECT * FROM article where article_id = ?";
     let dialect = MySqlDialect {}; // or AnsiDialect, or your own dialect ...
     let matched = is_pattern_match(sql, pattern, &dialect);
-    println!("pattern:{:?}\nsql:{:?}\neq:{:?}", pattern, sql, matched);
+    info!("pattern:{:?}\nsql:{:?}\neq:{:?}", pattern, sql, matched);
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn test_matchs() {
 
     for (pattern, sql) in sqls {
         let matched = is_pattern_match(pattern, sql, &dialect);
-        println!("pattern:{:?}\nsql:{:?}\neq:{:?}\n", pattern, sql, matched);
+        info!("pattern:{:?}\nsql:{:?}\neq:{:?}\n", pattern, sql, matched);
         assert_eq!(true, matched);
     }
 }
