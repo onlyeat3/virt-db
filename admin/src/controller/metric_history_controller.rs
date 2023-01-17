@@ -5,7 +5,7 @@ use chrono::{DateTime, Duration, Local, LocalResult, TimeZone, Utc};
 use chrono::prelude::*;
 use futures::TryFutureExt;
 use log::info;
-use sea_orm::{DatabaseBackend, DbBackend, JsonValue, PaginatorTrait, Statement};
+use sea_orm::{DatabaseBackend, DbBackend, DbErr, JsonValue, PaginatorTrait, Statement};
 use sea_orm::{DeriveIden, entity::*, EnumIter, query::*};
 use sea_orm::prelude::{DateTimeLocal, Decimal};
 use sea_orm::sea_query::Query;
@@ -55,10 +55,9 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
         })
         .collect();
     let mut final_metric_result_vec: Vec<MetricResult> = vec![];
+
+    let now_str = Local::now().format("%Y-%m-%d %H:%M:00").to_string();
     for mut x in metric_result_vec.clone() {
-        let _ = conn.execute(Statement::from_sql_and_values(DbBackend::MySql,"set time_zone = '+08:00';",vec![]))
-            .await
-            .unwrap();
         let sub_sql = format!(r#"
     SELECT
       concat(date,"") as date,
@@ -71,7 +70,7 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
       (
         SELECT
           date_format(
-            DATE_SUB(now(), INTERVAL t.help_topic_id MINUTE),
+            DATE_SUB("{}", INTERVAL t.help_topic_id MINUTE),
             '%H:%i:00'
           ) AS 'date'
         FROM
@@ -79,8 +78,8 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
         WHERE
           t.help_topic_id <= timestampdiff(
             minute,
-            DATE_SUB(now(), INTERVAL 30 MINUTE),
-            now()
+            DATE_SUB("{}", INTERVAL 30 MINUTE),
+            "{}"
           )
       ) t1
       LEFT JOIN (
@@ -106,13 +105,13 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
               metric_history
             where
               sql_str = "{}"
-              and created_at > DATE_SUB(now(), INTERVAL 30 MINUTE)
+              and created_at > DATE_SUB("{}", INTERVAL 30 MINUTE)
           ) as t
         group by
           created_at
       ) t2 ON t1.date = t2.created_at
 			order by date asc
-        "#, x.sql_str);
+        "#, now_str,now_str,now_str,x.sql_str,now_str);
         let query_result_vec = conn.query_all(Statement::from_sql_and_values(DatabaseBackend::MySql, sub_sql.as_str(), vec![]))
             .await
             .map_err(anyhow::Error::new)
@@ -123,7 +122,7 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
         //     let exec_count:Decimal = x.try_get("","exec_count").unwrap();
         //     let cache_hit_count:Decimal = x.try_get("","cache_hit_count").unwrap();
         //     let avg_duration:Decimal = x.try_get("","avg_duration").unwrap();
-        //     let date:String = x.try_get("","date").unwrap();
+        //     let date:Result<String,DbErr> = x.try_get("","date");
         //     info!("date:{:?},avg_duration:{:?},max_duration:{:?},min_duration:{:?},exec_count:{:?},cache_hit_count:{:?}",date,avg_duration,max_duration,min_duration,exec_count,cache_hit_count)
         // }
 
