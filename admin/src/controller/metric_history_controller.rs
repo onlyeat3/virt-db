@@ -5,7 +5,7 @@ use chrono::{DateTime, Duration, Local, LocalResult, TimeZone, Utc};
 use chrono::prelude::*;
 use futures::TryFutureExt;
 use log::info;
-use sea_orm::{DatabaseBackend, JsonValue, PaginatorTrait, Statement};
+use sea_orm::{DatabaseBackend, DbBackend, JsonValue, PaginatorTrait, Statement};
 use sea_orm::{DeriveIden, entity::*, EnumIter, query::*};
 use sea_orm::prelude::{DateTimeLocal, Decimal};
 use sea_orm::sea_query::Query;
@@ -56,6 +56,9 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
         .collect();
     let mut final_metric_result_vec: Vec<MetricResult> = vec![];
     for mut x in metric_result_vec.clone() {
+        let _ = conn.execute(Statement::from_sql_and_values(DbBackend::MySql,"set time_zone = '+08:00';",vec![]))
+            .await
+            .unwrap();
         let sub_sql = format!(r#"
     SELECT
       concat(date,"") as date,
