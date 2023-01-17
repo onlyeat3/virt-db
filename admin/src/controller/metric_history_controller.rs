@@ -60,7 +60,7 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
     for mut x in metric_result_vec.clone() {
         let sub_sql = format!(r#"
     SELECT
-      concat(date,"") as date,
+      DATE_FORMAT(str_to_date(date,"%Y-%m-%d %H:%i:00"),"%H:%i:00") as date,
       ifnull(avg_duration, 0) AS avg_duration,
       ifnull(max_duration, 0) AS max_duration,
       ifnull(min_duration, 0) AS min_duration,
@@ -71,12 +71,12 @@ pub async fn list_sql(metric_param: Json<MetricQueryParam>, app_state: Data<AppS
         SELECT
           date_format(
             DATE_SUB("{}", INTERVAL t.help_topic_id MINUTE),
-            '%H:%i:00'
+            "%Y-%m-%d %H:%i:00"
           ) AS 'date'
         FROM
           mysql.help_topic t
         WHERE
-          t.help_topic_id <= timestampdiff(
+          t.help_topic_id < timestampdiff(
             minute,
             DATE_SUB("{}", INTERVAL 30 MINUTE),
             "{}"
