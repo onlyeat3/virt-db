@@ -4,3 +4,4 @@ pub mod prelude;
 
 pub mod cache_config;
 pub mod metric_history;
+pub mod sys_user;

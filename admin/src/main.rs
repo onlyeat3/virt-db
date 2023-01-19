@@ -79,6 +79,7 @@ async fn main() -> std::io::Result<()> {
                 )
                 .service(controller::index_controller::index)
                 .service(controller::user_controller::login)
+                .service(controller::user_controller::update_password)
                 .service(controller::user_controller::get_user_info)
                 .service(controller::mock_controller::get_async_routes)
                 .service(cache_config_controller::list)

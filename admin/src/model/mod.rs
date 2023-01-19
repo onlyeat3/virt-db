@@ -9,7 +9,9 @@ use actix_web::dev::Payload;
 use actix_web::error::ErrorBadRequest;
 use actix_web::error::ErrorUnauthorized;
 use actix_web::http::header::{HeaderValue, ToStrError};
-use actix_web::{dev, web, App, FromRequest, HttpRequest};
+use actix_web::{dev, web, App, FromRequest, HttpRequest, Responder, HttpResponse};
+use actix_web::body::{BoxBody, EitherBody};
+use actix_web::web::Json;
 use futures::future::{err, ok};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -41,6 +43,28 @@ impl<V> DataWrapper<V> {
             success: code == 0,
             data: v,
         }
+    }
+
+    pub fn fail(message: String) -> DataWrapper<String> {
+        DataWrapper {
+            code:-1,
+            message,
+            success: false,
+            data: None,
+        }
+    }
+}
+
+impl<V:Serialize> Responder for DataWrapper<V>{
+    type Body = BoxBody;
+
+    fn respond_to(self, req: &HttpRequest) -> HttpResponse<Self::Body> {
+        let v= self;
+        let v=serde_json::to_string(&v).unwrap();
+        let response_result = HttpResponse::Ok()
+            .content_type("application/json")
+            .body(v);
+        return response_result;
     }
 }
 
@@ -91,7 +115,7 @@ impl PageParam {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrentUser {
-    pub user_id: i32,
+    pub user_id: i64,
     pub user_name: String,
 }
 

@@ -2,3 +2,4 @@
 
 pub use super::cache_config::Entity as CacheConfig;
 pub use super::metric_history::Entity as MetricHistory;
+pub use super::sys_user::Entity as SysUser;

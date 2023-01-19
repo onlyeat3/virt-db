@@ -29,3 +29,11 @@ pub struct GetUserInfoResp {
     pub home_path: String,
     pub roles: Vec<String>,
 }
+
+#[derive(Default, Debug, Clone, PartialOrd, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordUpdateParam {
+    pub current_password: String,
+    pub new_password: String,
+    pub new_password_confirm: String,
+}
