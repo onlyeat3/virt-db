@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use log::kv::ToValue;
+use mysql_async::Conn;
 use mysql_common::bigdecimal03::ToPrimitive;
 use opensrv_mysql::*;
 use tokio::net::TcpListener;
@@ -44,8 +45,12 @@ pub async fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::E
             let redis_url = format!("redis://{}@{}:{}", redis_requirepass, redis_ip, redis_port);
             debug!("mysql_url:{:?},redis_url:{:?}", mysql_url, redis_url);
 
+            let mysql_conn = Conn::from_url(mysql_url.to_string()).await?;
+            let client = redis::Client::open(redis_url.to_string())?;
+            let redis_conn = client.get_async_connection().await?;
+
             let r = AsyncMysqlIntermediary::run_on(
-                MySQL::new(&*mysql_url, redis_url, conn_id, server_config),
+                MySQL::new(mysql_conn, redis_conn, conn_id, server_config),
                 r,
                 w,
             )

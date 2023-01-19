@@ -49,10 +49,8 @@ pub struct MySQLResult {
 
 pub struct MySQL {
     _conn_id: u32,
-    _mysql_url: String,
-    _redis_url: String,
-    _mysql_connection: HashMap<String, Conn>,
-    _redis_conn: HashMap<String, Connection>,
+    _mysql_connection: Conn,
+    _redis_conn: Connection,
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     prepared: Slab<Prepared>,
     dialect: MySqlDialect,
@@ -61,17 +59,15 @@ pub struct MySQL {
 
 impl MySQL {
     pub fn new(
-        mysql_url: &str,
-        redis_url: String,
+        mysql_conn: Conn,
+        redis_conn: Connection,
         conn_id: u32,
         server_config: ServerConfig,
     ) -> Self {
         MySQL {
             _conn_id: conn_id,
-            _mysql_url: mysql_url.to_string(),
-            _redis_url: redis_url.to_string(),
-            _mysql_connection: HashMap::new(),
-            _redis_conn: HashMap::new(),
+            _mysql_connection: mysql_conn,
+            _redis_conn: redis_conn,
             prepared: Slab::new(),
             dialect: MySqlDialect {},
             server_config,
@@ -79,29 +75,13 @@ impl MySQL {
     }
 
     pub async fn get_mysql_connection<'a>(&'a mut self) -> Result<&'a mut Conn, Error> {
-        let cache_key = String::from("mysql_connection");
-        if self._mysql_connection.contains_key(&*cache_key) {
-            let v = self._mysql_connection.get_mut(&*cache_key).unwrap();
-            return Ok(v);
-        }
-        let v = Conn::from_url(self._mysql_url.to_string()).await?;
-        let v_result = self._mysql_connection.entry(cache_key).or_insert_with(|| v);
-        Ok(v_result)
+        Ok(&mut self._mysql_connection)
     }
 
     pub async fn get_redis_connection<'a>(
         &'a mut self,
-    ) -> Result<&'a mut Connection, redis::RedisError> {
-        let cache_key = String::from("redis_connection");
-        if self._redis_conn.contains_key(&*cache_key) {
-            let v = self._redis_conn.get_mut(&*cache_key).unwrap();
-            return Ok(v);
-        }
-
-        let client = redis::Client::open(self._redis_url.to_string())?;
-        let v = client.get_async_connection().await?;
-        let v_result = self._redis_conn.entry(cache_key).or_insert_with(|| v);
-        Ok(v_result)
+    ) -> Result<&'a mut Connection, RedisError> {
+        Ok(&mut self._redis_conn)
     }
 }
 
