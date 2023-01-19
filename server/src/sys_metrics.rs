@@ -76,7 +76,7 @@ pub async fn record_exec_log(exec_log: ExecLog) {
     let locked_result = EXEC_LOG_LIST_MUTEX.lock();
     match locked_result {
         Ok(mut exec_log_list) => {
-            info!("add new exec_log:{:?}",exec_log);
+            trace!("add new exec_log:{:?}",exec_log);
             exec_log_list.push(exec_log);
         }
         Err(err) => {
