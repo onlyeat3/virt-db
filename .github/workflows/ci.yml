@@ -64,7 +64,7 @@ jobs:
       - name: build
         timeout-minutes: 300
         run: |
-          cargo build --release  --target=${{ matrix.version }}-${{ matrix.target.triple }} --verbose
+          cargo build --release  --target=${{ matrix.target.triple }} --verbose
 
       - uses: GoogleCloudPlatform/release-please-action@v3
         id: release
