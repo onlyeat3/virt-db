@@ -1,0 +1,55 @@
+# Changelog
+
+## 1.0.0 (2023-01-20)
+
+
+### Features
+
+* add chrono support ([7b024bd](https://github.com/onlyeat3/virt-db-rs/commit/7b024bd2e115bdc64b3381c060f54a25480e9a37))
+* CORS 适配新UI ([7d999a1](https://github.com/onlyeat3/virt-db-rs/commit/7d999a1173a16bc961c69e8afe52f3ab18fc8ce6))
+* sqlx -&gt; sea-orm ([5a0f44d](https://github.com/onlyeat3/virt-db-rs/commit/5a0f44d4e5663db2d61960efd5f128099f59c31a))
+* token有效期临时改为24小时 ([9a652fb](https://github.com/onlyeat3/virt-db-rs/commit/9a652fb00388dae17748c9a58133035a0bbe67a8))
+* vt-server 定时注册节点信息到 admin ([ea6281e](https://github.com/onlyeat3/virt-db-rs/commit/ea6281e3472479231db46eea43c54afb42fa8819))
+* 不再使用sqlx加载缓存配置，改用mysql_async自带API ([819d428](https://github.com/onlyeat3/virt-db-rs/commit/819d428adc43941c12f67fa23033a962925c5c95))
+* 严重error抛出，以触发主动断开链接 ([6b71ab3](https://github.com/onlyeat3/virt-db-rs/commit/6b71ab396328635d9511796eeac83c0a08103b84))
+* 使用sea-orm实现多条件列表查询和分页功能 ([6eb81ab](https://github.com/onlyeat3/virt-db-rs/commit/6eb81ab539d873d39297bbce03453b312447a75c))
+* 保存SQL ([5469323](https://github.com/onlyeat3/virt-db-rs/commit/5469323f3f56b2d80f65aa7ae29e5757ef908e00))
+* 入库-定时上报SQL执行的统计指标 ([8714c67](https://github.com/onlyeat3/virt-db-rs/commit/8714c67ad1d5b2cbcc40bcb6df2622c8d6265076))
+* 创建、修改缓存配置 ([5465778](https://github.com/onlyeat3/virt-db-rs/commit/54657783fbb464e100d524998700d098c28832a3))
+* 删除多余日志配置 ([dc27086](https://github.com/onlyeat3/virt-db-rs/commit/dc270861816541a8e3ddc224164edfb77224bd59))
+* 删除缓存配置接口 ([82e88b7](https://github.com/onlyeat3/virt-db-rs/commit/82e88b7c141ffe3e5e5ba0d2af260d64f9edafd0))
+* 增加meta数据刷新频率配置项 ([5fa4813](https://github.com/onlyeat3/virt-db-rs/commit/5fa48137e92e62f772a2fa204c92118a9a89ec29))
+* 增加prometheus端口配置项、增加功能启用的日志输出 ([b3dd3bc](https://github.com/onlyeat3/virt-db-rs/commit/b3dd3bc5932c2786596874fe06ce9d8affed4c06))
+* 增加sqlx，使用anyhow处理error ([e3ba2c9](https://github.com/onlyeat3/virt-db-rs/commit/e3ba2c9fb12e78abd5d3af125094b83cfc645d95))
+* 增加virt-db server本身的鉴权 ([4416d26](https://github.com/onlyeat3/virt-db-rs/commit/4416d261bc648b4b45ec373caa96e25637352332))
+* 增加接口 缓存配置列表 ([68df89c](https://github.com/onlyeat3/virt-db-rs/commit/68df89ce9fdf65570f15c38cd5459a2c430515ee))
+* 增加缓存配置的列表接口 ([9493f19](https://github.com/onlyeat3/virt-db-rs/commit/9493f1934b5a88319f1f317d0adb03ce8a9b9ca0))
+* 处理SQL解析器部分token匹配逻辑问题 ([e1f9679](https://github.com/onlyeat3/virt-db-rs/commit/e1f9679d182a6f6aa0737476863a3cfa562f577e))
+* 定时上报SQL执行的统计指标 ([ca5c38d](https://github.com/onlyeat3/virt-db-rs/commit/ca5c38d0d9b1a5a4cdb0ab45513975433ecc42f7))
+* 换一个不太容易冲突的端口 ([1d59e6c](https://github.com/onlyeat3/virt-db-rs/commit/1d59e6c892aa10005675bd37068b30b9afea58ed))
+* 注册vt-server节点、自动移除失效节点 ([753bd8c](https://github.com/onlyeat3/virt-db-rs/commit/753bd8c850536e9d1c49efb3e8fcf554ead4b28f))
+* 添加SQL指标统计API ([7440893](https://github.com/onlyeat3/virt-db-rs/commit/7440893359b7f2eb5724d2f4ce205dfc3e71f67b))
+* 生成metric_history 实体 ([2a4e998](https://github.com/onlyeat3/virt-db-rs/commit/2a4e998a0306f95416fb497877139fef3400b0cc))
+* 用户密码修改功能和登录功能增加实际实现 ([2618fe4](https://github.com/onlyeat3/virt-db-rs/commit/2618fe4efabf7abe1f6e8a99f260888fa9baac71))
+* 简化是否使用缓存的判断逻辑 ([0115af3](https://github.com/onlyeat3/virt-db-rs/commit/0115af31cc10c045f8d43e5b1a7af40acfd65a06))
+* 细化token过期提示 ([65433ec](https://github.com/onlyeat3/virt-db-rs/commit/65433ec617b512636a1cc40f2ad7bdc9c24728f3))
+* 被代理链接初始化时机移动到客户端创建链接后 ([9058881](https://github.com/onlyeat3/virt-db-rs/commit/90588813f82b99fa4fb82ad9731b61e2633d6aa6))
+* 适配新UI的登录接口 ([5be6e68](https://github.com/onlyeat3/virt-db-rs/commit/5be6e6805a9beb8e9f1f7519674cf7fa90f7810a))
+* 通用的异常结果返回处理 ([dbbce63](https://github.com/onlyeat3/virt-db-rs/commit/dbbce637f26bcfefa8b21c46a8700891ecedec78))
+* 隐藏示例页面 ([d578e00](https://github.com/onlyeat3/virt-db-rs/commit/d578e004350d467ba08ecb4e7e33bf6c35c074bc))
+
+
+### Bug Fixes
+
+* comment ([fe2c4ff](https://github.com/onlyeat3/virt-db-rs/commit/fe2c4ff96bf26b550a161ba7e8734b9353c2f222))
+* controller的方法修饰符错误 ([7d43d8f](https://github.com/onlyeat3/virt-db-rs/commit/7d43d8f9ede214b42db781801d5d698d2e053d5c))
+* Convert seconds 86400 to FixedOffset fail ([f33d9cb](https://github.com/onlyeat3/virt-db-rs/commit/f33d9cb380bc90cad8b2cd09934b5bbfaf5c4741))
+* Convert seconds 86400 to FixedOffset fail ([556c806](https://github.com/onlyeat3/virt-db-rs/commit/556c8067746a3a806c6ccea863b898ab45fea4a4))
+* miss column 'date' ([7ebfde4](https://github.com/onlyeat3/virt-db-rs/commit/7ebfde41aa9a37d1d9bf4d8e8b7cb532f83f27d7))
+* struct Role not found ([e892538](https://github.com/onlyeat3/virt-db-rs/commit/e892538fa73354880f3155c91c59c770caa6280d))
+* token失效时间计算错误 ([ca7dea8](https://github.com/onlyeat3/virt-db-rs/commit/ca7dea81f35eb4ecde7045fb05004e11079384c8))
+* while ([a5bdb49](https://github.com/onlyeat3/virt-db-rs/commit/a5bdb4962eeb0ddac646cf684d4ecf3579d4bef6))
+* 多打开的注释 ([6f64506](https://github.com/onlyeat3/virt-db-rs/commit/6f64506e3bf53af19f180ecdf1a37ef2c47ea6ee))
+* 对placeholder需要特殊处理 ([c38014b](https://github.com/onlyeat3/virt-db-rs/commit/c38014bb2d1c0bbf21dabff27f9ff9d28239d9b5))
+* 时区 ([06a7bca](https://github.com/onlyeat3/virt-db-rs/commit/06a7bca0bf1c498dcaf7f43fff03c9abb41b5a48))
+* 时区 ([6b09063](https://github.com/onlyeat3/virt-db-rs/commit/6b09063d803a9fa8bf2e0e9a4d07c73df680efab))
