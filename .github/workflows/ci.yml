@@ -75,7 +75,7 @@ jobs:
 
       - name: Get current date
         id: date
-        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+        run: echo "NOW=$(date +'%Y-%m-%dT%H:%M:%S')" >> $NOW
 
       - name: GitHub Release
         id: create_release
@@ -83,8 +83,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           with:
-            tag_name: nightly-tag-${{ steps.date.outputs.date }}
-            release_name: nightly-release-${{ steps.date.outputs.date }}
+            tag_name: nightly-tag-${{ NOW }}
+            release_name: nightly-release-${{ NOW }}
             body: 请见 changelog.md
             draft: false
             prerelease: false
