@@ -19,7 +19,6 @@ jobs:
           - { name: macOS, os: macos-latest, triple: x86_64-apple-darwin }
           - { name: Windows, os: windows-2022, triple: x86_64-pc-windows-msvc }
         version:
-          - 1.59.0 # MSRV
           - nightly
 
     name: ${{ matrix.target.name }} / ${{ matrix.version }}
@@ -73,6 +72,22 @@ jobs:
           release-type: node
           package-name: standard-version
           changelog-types: '[{"type": "types", "section":"Types", "hidden": false},{"type": "revert", "section":"Reverts", "hidden": false},{"type": "feat", "section": "Features", "hidden": false},{"type": "fix", "section": "Bug Fixes", "hidden": false},{"type": "improvement", "section": "Feature Improvements", "hidden": false},{"type": "docs", "section":"Docs", "hidden": false},{"type": "style", "section":"Styling", "hidden": false},{"type": "refactor", "section":"Code Refactoring", "hidden": false},{"type": "perf", "section":"Performance Improvements", "hidden": false},{"type": "test", "section":"Tests", "hidden": false},{"type": "build", "section":"Build System", "hidden": false},{"type": "ci", "section":"CI", "hidden":false}]'
+
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+
+      - name: GitHub Release
+        id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          with:
+            tag_name: nightly-tag-${{ steps.date.outputs.date }}
+            release_name: nightly-release-${{ steps.date.outputs.date }}
+            body: 请见 changelog.md
+            draft: false
+            prerelease: false
 
       - name: Clear the cargo caches
         run: |
