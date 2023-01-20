@@ -78,17 +78,16 @@ jobs:
           echo "builddate=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         id: version  # this is used on variable path
 
-      - name: GitHub Release
-        id: create_release
+      - name: Create Release
+        id: nightly-snapshot
         uses: actions/create-release@latest
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          with:
-            tag_name: v1.0.0-beta
-            release_name: v1.0.0-beta
-            body: 请见 changelog.md
-            draft: false
-            prerelease: false
+        with:
+          tag_name: 1.0.0-beta1
+          release_name: 1.0.0-beta1
+          draft: false
+          prerelease: false
 
       - name: Clear the cargo caches
         run: |
