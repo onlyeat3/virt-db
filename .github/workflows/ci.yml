@@ -84,8 +84,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           with:
-            tag_name: nightly-tag-${{ steps.version.outputs.builddate }}
-            release_name: nightly-release-${{ steps.version.outputs.builddate }}
+            tag_name: ${{ steps.version.outputs.builddate }}
+            release_name: ${{ steps.version.outputs.builddate }}
             body: 请见 changelog.md
             draft: false
             prerelease: false
