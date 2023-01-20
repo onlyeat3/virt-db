@@ -73,9 +73,10 @@ jobs:
           package-name: standard-version
           changelog-types: '[{"type": "types", "section":"Types", "hidden": false},{"type": "revert", "section":"Reverts", "hidden": false},{"type": "feat", "section": "Features", "hidden": false},{"type": "fix", "section": "Bug Fixes", "hidden": false},{"type": "improvement", "section": "Feature Improvements", "hidden": false},{"type": "docs", "section":"Docs", "hidden": false},{"type": "style", "section":"Styling", "hidden": false},{"type": "refactor", "section":"Code Refactoring", "hidden": false},{"type": "perf", "section":"Performance Improvements", "hidden": false},{"type": "test", "section":"Tests", "hidden": false},{"type": "build", "section":"Build System", "hidden": false},{"type": "ci", "section":"CI", "hidden":false}]'
 
-      - name: Get current date
-        id: date
-        run: echo "NOW=$(date +'%Y-%m-%dT%H:%M:%S')" >> $NOW
+      - name: "Set current date as env variable"
+        run: |
+          echo "builddate=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        id: version  # this is used on variable path
 
       - name: GitHub Release
         id: create_release
@@ -83,8 +84,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           with:
-            tag_name: nightly-tag-${{ NOW }}
-            release_name: nightly-release-${{ NOW }}
+            tag_name: nightly-tag-${{ steps.version.outputs.builddate }}
+            release_name: nightly-release-${{ steps.version.outputs.builddate }}
             body: 请见 changelog.md
             draft: false
             prerelease: false
