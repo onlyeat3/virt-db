@@ -80,8 +80,6 @@ jobs:
           rm -rf target/release/server.d
           rm -rf target/release/server.pdb
           cd target/release
-          mv admin* ./
-          mv server* ./
           zip -r ${{ matrix.target.triple }}.zip admin* server*
           mv ${{ matrix.target.triple }}.zip ../../
           
