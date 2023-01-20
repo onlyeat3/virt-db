@@ -93,8 +93,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: 1.0.0-beta1
+          release_name: 1.0.0-beta1
           body: TODO New Release.
           draft: false
           prerelease: false
