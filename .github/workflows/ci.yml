@@ -65,29 +65,46 @@ jobs:
         run: |
           cargo build --release  --target=${{ matrix.target.triple }} --verbose
 
-      - uses: GoogleCloudPlatform/release-please-action@v3
-        id: release
-        with:
-          token: ${{ secrets.RELEASE_TOKEN }}
-          release-type: node
-          package-name: standard-version
-          changelog-types: '[{"type": "types", "section":"Types", "hidden": false},{"type": "revert", "section":"Reverts", "hidden": false},{"type": "feat", "section": "Features", "hidden": false},{"type": "fix", "section": "Bug Fixes", "hidden": false},{"type": "improvement", "section": "Feature Improvements", "hidden": false},{"type": "docs", "section":"Docs", "hidden": false},{"type": "style", "section":"Styling", "hidden": false},{"type": "refactor", "section":"Code Refactoring", "hidden": false},{"type": "perf", "section":"Performance Improvements", "hidden": false},{"type": "test", "section":"Tests", "hidden": false},{"type": "build", "section":"Build System", "hidden": false},{"type": "ci", "section":"CI", "hidden":false}]'
+#      - uses: GoogleCloudPlatform/release-please-action@v3
+#        id: release
+#        with:
+#          token: ${{ secrets.RELEASE_TOKEN }}
+#          release-type: node
+#          package-name: standard-version
+#          changelog-types: '[{"type": "types", "section":"Types", "hidden": false},{"type": "revert", "section":"Reverts", "hidden": false},{"type": "feat", "section": "Features", "hidden": false},{"type": "fix", "section": "Bug Fixes", "hidden": false},{"type": "improvement", "section": "Feature Improvements", "hidden": false},{"type": "docs", "section":"Docs", "hidden": false},{"type": "style", "section":"Styling", "hidden": false},{"type": "refactor", "section":"Code Refactoring", "hidden": false},{"type": "perf", "section":"Performance Improvements", "hidden": false},{"type": "test", "section":"Tests", "hidden": false},{"type": "build", "section":"Build System", "hidden": false},{"type": "ci", "section":"CI", "hidden":false}]'
 
-      - name: "Set current date as env variable"
+      - name: Zip the Build
         run: |
-          echo "builddate=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-        id: version  # this is used on variable path
+          rm -rf target/release/admin.d
+          rm -rf target/release/admin.pdb
+          rm -rf target/release/server.d
+          rm -rf target/release/server.pdb
+          mv target/release/admin* ./
+          mv target/release/server* ./
+          zip -r ${{ matrix.target.triple }}.zip admin* server*
+          
 
       - name: Create Release
-        id: nightly-snapshot
-        uses: actions/create-release@latest
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: TODO New Release.
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
-          tag_name: 1.0.0-beta1
-          release_name: 1.0.0-beta1
-          draft: false
-          prerelease: false
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ matrix.target.triple }}.zip
+          asset_name: ${{ matrix.target.triple }}.zip
+          asset_content_type: application/zip
 
       - name: Clear the cargo caches
         run: |
