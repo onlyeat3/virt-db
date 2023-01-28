@@ -24,11 +24,11 @@ jobs:
           override: true
       - name: Install x86 Build Dependencies
         if: ${{ matrix.target == 'i686-pc-windows-gnu' || matrix.target == 'i686-unknown-linux-gnu' }}
-        run: sudo dpkg --add-architecture i386 && sudo apt-get update && sudo apt-get install libssl-dev:i386 clang libsqlite3-dev
+        run: sudo dpkg --add-architecture i386 && sudo apt-get update &&  apt-get update && apt-get install -y musl-dev musl-tools file git openssh-client make cmake g++ curl pkgconf ca-certificates xutils-dev libssl-dev libpq-dev automake autoconf libtool protobuf-compiler libprotobuf-dev --no-install-recommends && rm -rf /var/lib/apt/lists/*
       - name: Install x86_64 Build Dependencies
         if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' }}
         run: |
-          sudo apt-get update && sudo apt-get install pkg-config libssl-dev clang libsqlite3-dev
+          sudo apt-get update && sudo apt-get update &&  apt-get update && apt-get install -y musl-dev musl-tools file git openssh-client make cmake g++ curl pkgconf ca-certificates xutils-dev libssl-dev libpq-dev automake autoconf libtool protobuf-compiler libprotobuf-dev --no-install-recommends && rm -rf /var/lib/apt/lists/*
           ls -al /usr/lib
           ls -al /usr/lib/x86_64-linux-gnu
       - name: Build x86
