@@ -13,6 +13,7 @@ use log4rs::config::{Appender, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log::LevelFilter;
 
+
 const SIZE_MB: u64 = 1024 * 1024;
 
 pub fn init_logger() -> anyhow::Result<()> {
@@ -24,7 +25,7 @@ pub fn init_logger() -> anyhow::Result<()> {
     let log_path = exec_file_path.parent()
         .unwrap()
         .join("logs");
-    let log_pattern = log_path.join("server.log");
+    let log_pattern = log_path.join("admin.log");
 
     #[cfg(feature = "gzip")]
         let roll_pattern = format!("{}/{}", log_path.to_string_lossy(), "log.{}.gz");
@@ -53,7 +54,6 @@ pub fn init_logger() -> anyhow::Result<()> {
         //     .build("app::requests", LevelFilter::Info))
         .build(Root::builder().appender("stdout").appender("file").build(LevelFilter::Info))
         .unwrap();
-
     let handle = log4rs::init_config(config).unwrap();
     anyhow::Ok(())
 }

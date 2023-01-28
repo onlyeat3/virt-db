@@ -36,7 +36,7 @@ struct CliArgs {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli_args = CliArgs::parse();
-    sys_log::init_logger();
+    sys_log::init_logger()?;
 
     let sys_config_wrapper = sys_config::parse_config(&cli_args.config_file).await;
     if let Err(err) = sys_config_wrapper {

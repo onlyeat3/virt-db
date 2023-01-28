@@ -8,7 +8,6 @@ use actix_settings::{ApplySettings as _, BasicSettings};
 use actix_web::http::header;
 use actix_web::middleware::{Compress, Condition, Logger};
 use actix_web::{get, http, post, web, App, HttpServer, Responder};
-use env_logger::Env;
 use log::info;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use serde::{de, Deserialize};
@@ -27,6 +26,7 @@ mod error;
 mod model;
 mod utils;
 mod job;
+mod sys_log;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -36,8 +36,7 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // std::env::set_var("RUST_LOG", "info");
-    env_logger::init_from_env(Env::default().default_filter_or("info"));
+    sys_log::init_logger();
     let settings: BasicSettings<ApplicationSettings> = config::app_config::load_config();
     env::set_var("DATABASE_URL", settings.application.mysql_url.as_str());
     let mut opt = ConnectOptions::new(settings.application.mysql_url.as_str().to_owned());
