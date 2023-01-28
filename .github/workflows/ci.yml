@@ -84,7 +84,7 @@ jobs:
 
       - name: Get current Commit ID
         id: commitid
-        run: git rev-parse --short HEAD
+        run: echo "::set-output name=commitid::$(git rev-parse --short HEAD)"
 
       - name: Create Release
         id: create_release
@@ -92,8 +92,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
-          tag_name: ${{ steps.date.outputs.commitid }}
-          release_name: ${{ steps.date.outputs.commitid }}
+          tag_name: ${{ steps.commitid.outputs.commitid }}
+          release_name: ${{ steps.commitid.outputs.commitid }}
           body: TODO New Release.
           draft: false
           prerelease: false
