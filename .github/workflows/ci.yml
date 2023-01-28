@@ -63,5 +63,5 @@ jobs:
         run: |
           ls -al target
           ls -al target/${{matrix.target}}
-          file target/${{matrix.target}}/admin
-          file target/${{matrix.target}}/server
+          file target/${{matrix.target}}/release/admin
+          file target/${{matrix.target}}/release/server
