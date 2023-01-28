@@ -83,8 +83,8 @@ jobs:
           sudo zip -r ${{ matrix.target }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
 
       - name: Get current Commit ID
-        id: commitid
-        run: echo "::set-output name=commitid::$(git rev-parse --short HEAD)"
+        id: branch
+        run: echo "::set-output name=branch::$(git rev-parse --abbrev-ref HEAD)"
 
       - name: Create Release
         id: create_release
@@ -92,11 +92,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
-          tag_name: ${{ steps.commitid.outputs.commitid }}
-          release_name: ${{ steps.commitid.outputs.commitid }}
+          tag_name: ${{ steps.branch.outputs.branch }}
+          release_name: ${{ steps.branch.outputs.branch }}
           body: TODO New Release.
           draft: false
           prerelease: false
+          allowUpdates: true
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
