@@ -55,7 +55,7 @@ jobs:
           args: --release --target=${{ matrix.target }}
 
       - name: Build Linux Musl
-        uses: gmiam/rust-musl-action@v1.1.2
+        uses: sassman/rust-deb-builder@v1
         if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
         with:
           args: /bin/bash -c "cargo build --release --target=${{ matrix.target }}"
