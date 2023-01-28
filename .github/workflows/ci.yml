@@ -43,9 +43,7 @@ jobs:
           command: build
           args: --release --target=${{ matrix.target }}
       - name: Build x86_64
-        uses:
-          - actions-rs/cargo@v1
-          - gmiam/rust-musl-action@master
+        uses: actions-rs/cargo@v1 gmiam/rust-musl-action@master
         if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' }}
         env:
           TARGET_CC: clang
