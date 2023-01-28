@@ -1,119 +1,47 @@
-name: CI
+on: [push]
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
-
-permissions:
-  contents: read  #  to fetch code (actions/checkout)
+name: Build
 
 jobs:
-  build_and_push:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         target:
-          - { name: Linux, os: ubuntu-latest, triple: x86_64-unknown-linux-musl }
-#          - { name: macOS, os: macos-latest, triple: x86_64-apple-darwin }
-#          - { name: Windows, os: windows-2022, triple: x86_64-pc-windows-msvc }
-        version:
-          - nightly
-
-    name: ${{ matrix.target.name }} / ${{ matrix.version }}
-    runs-on: ${{ matrix.target.os }}
-
-    env:
-      CI: 1
-      CARGO_INCREMENTAL: 0
-      VCPKGRS_DYNAMIC: 1
-
+          - i686-pc-windows-gnu
+          - i686-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - x86_64-pc-windows-gnu
+          - x86_64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v2
-
-      # install OpenSSL on Windows
-      # TODO: GitHub actions docs state that OpenSSL is
-      # already installed on these Windows machines somewhere
-      - name: Set vcpkg root
-        if: matrix.target.triple == 'x86_64-pc-windows-msvc'
-        run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Install OpenSSL
-        if: matrix.target.triple == 'x86_64-pc-windows-msvc'
-        run: vcpkg install openssl:x64-windows
-
-      - name: Install ${{ matrix.version }}
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.version }}
-          target: ${{ matrix.target.triple }}
-          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
           override: true
-
-      - name: Generate Cargo.lock
+      - name: Install x86 Build Dependencies
+        if: ${{ matrix.target == 'i686-pc-windows-gnu' || matrix.target == 'i686-unknown-linux-gnu' }}
+        run: sudo dpkg --add-architecture i386 && sudo apt-get update && sudo apt-get install libssl-dev:i386 clang
+      - name: Install x86_64 Build Dependencies
+        if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' }}
+        run: sudo apt-get update && sudo apt-get install pkg-config libssl-dev clang
+      - name: Build x86
         uses: actions-rs/cargo@v1
-        with: { command: generate-lockfile }
-      - name: Cache Dependencies
-        uses: Swatinem/rust-cache@v1.2.0
-
-      - name: workaround MSRV issues
-        if: matrix.version != 'stable'
-        run: |
-          cargo update -p=zstd-sys --precise=2.0.1+zstd.1.5.2
-
-      - name: build
-        timeout-minutes: 300
-        run: |
-          cargo build --release
-
-#      - uses: GoogleCloudPlatform/release-please-action@v3
-#        id: release
-#        with:
-#          token: ${{ secrets.RELEASE_TOKEN }}
-#          release-type: node
-#          package-name: standard-version
-#          changelog-types: '[{"type": "types", "section":"Types", "hidden": false},{"type": "revert", "section":"Reverts", "hidden": false},{"type": "feat", "section": "Features", "hidden": false},{"type": "fix", "section": "Bug Fixes", "hidden": false},{"type": "improvement", "section": "Feature Improvements", "hidden": false},{"type": "docs", "section":"Docs", "hidden": false},{"type": "style", "section":"Styling", "hidden": false},{"type": "refactor", "section":"Code Refactoring", "hidden": false},{"type": "perf", "section":"Performance Improvements", "hidden": false},{"type": "test", "section":"Tests", "hidden": false},{"type": "build", "section":"Build System", "hidden": false},{"type": "ci", "section":"CI", "hidden":false}]'
-
-      - name: Zip the Build
-        run: |
-          pwd
-          ls -al target/release
-          rm -rf target/release/admin.d
-          rm -rf target/release/admin.pdb
-          rm -rf target/release/server.d
-          rm -rf target/release/server.pdb
-          cd target/release
-          ls -al
-          zip -r ${{ matrix.target.triple }}.zip admin* server*
-          mv ${{ matrix.target.triple }}.zip ../../
-          
-      - name: Get current date
-        id: date
-        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+        if: ${{ matrix.target == 'i686-pc-windows-gnu' || matrix.target == 'i686-unknown-linux-gnu' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          TARGET_CC: clang
+          OPENSSL_LIB_DIR: /usr/lib/i386-linux-gnu/
+          OPENSSL_INCLUDE_DIR: /usr/include/openssl/
         with:
-          tag_name: ${{ steps.date.outputs.date }}
-          release_name: ${{ steps.date.outputs.date }}
-          body: TODO New Release.
-          draft: false
-          prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+          command: build
+          args: --release --target=${{ matrix.target }}
+      - name: Build x86_64
+        uses: actions-rs/cargo@v1
+        if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          TARGET_CC: clang
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ matrix.target.triple }}.zip
-          asset_name: ${{ matrix.target.triple }}.zip
-          asset_content_type: application/zip
-
-      - name: Clear the cargo caches
-        run: |
-          cargo install cargo-cache --version 0.8.2 --no-default-features --features ci-autoclean
-          cargo-cache
+          command: build
+          args: --release --target=${{ matrix.target }}
