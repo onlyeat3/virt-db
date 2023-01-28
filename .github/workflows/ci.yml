@@ -78,14 +78,10 @@ jobs:
           file target/${{matrix.target}}/release/admin
           file target/${{matrix.target}}/release/server
           
-          sudo rm -rf target/${{matrix.target}}/release/admin.d
-          sudo rm -rf target/${{matrix.target}}/release/admin.pdb
-          sudo rm -rf target/${{matrix.target}}/release/server.d
-          sudo rm -rf target/${{matrix.target}}/release/server.pdb
-          sudo cd target/${{matrix.target}}/release
-          sudo ls -al
-          sudo zip -r ${{ matrix.target.triple }}.zip admin* server*
-          sudo mv ${{ matrix.target.triple }}.zip ../../
+          cd target/${{matrix.target}}/release
+          ls -al
+          zip -r ${{ matrix.target.triple }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
+          cp ${{ matrix.target.triple }}.zip ../../
 
       - name: Get current Commit ID
         id: commitid
