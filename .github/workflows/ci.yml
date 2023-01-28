@@ -80,7 +80,7 @@ jobs:
           
           cd target/${{matrix.target}}/release
           ls -al
-          zip -r ${{ matrix.target.triple }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
+          sudo zip -r ${{ matrix.target.triple }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
           cp ${{ matrix.target.triple }}.zip ../../
 
       - name: Get current Commit ID
