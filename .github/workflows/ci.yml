@@ -61,6 +61,7 @@ jobs:
         if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
       - name: Check Artifact
         run: |
-          ls -al target/release
-          file target/release/admin
-          file target/release/server
+          ls -al target
+          ls -al target/${{matrix.target}}
+          file target/${{matrix.target}}/admin
+          file target/${{matrix.target}}/server
