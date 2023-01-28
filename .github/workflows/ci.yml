@@ -22,6 +22,11 @@ jobs:
           toolchain: nightly
           target: ${{ matrix.target }}
           override: true
+      - name: Generate Cargo.lock
+        uses: actions-rs/cargo@v1
+        with: { command: generate-lockfile }
+      - name: Cache Dependencies
+        uses: Swatinem/rust-cache@v1.2.0
       - name: Install x86 Build Dependencies
         if: ${{ matrix.target == 'i686-pc-windows-gnu' || matrix.target == 'i686-unknown-linux-gnu' }}
         run: |
@@ -33,6 +38,7 @@ jobs:
           sudo apt-get update && sudo apt-get install pkg-config libssl-dev clang
 
       - name: Build x86
+        timeout-minutes: 300
         uses: actions-rs/cargo@v1
         if: ${{ matrix.target == 'i686-pc-windows-gnu' || matrix.target == 'i686-unknown-linux-gnu' }}
         env:
@@ -44,6 +50,7 @@ jobs:
           args: --release --target=${{ matrix.target }}
 
       - name: Build x86_64
+        timeout-minutes: 300
         uses: actions-rs/cargo@v1
         if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl' }}
         env:
@@ -55,13 +62,58 @@ jobs:
           args: --release --target=${{ matrix.target }}
 
       - name: Build Linux Musl
+        timeout-minutes: 300
         uses: jean-dfinity/rust-musl-action@master
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
         with:
           args: rustup default nightly && rustup target add x86_64-unknown-linux-musl && cargo +nightly build --target=${{ matrix.target }} --release
-        if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
-      - name: Check Artifact
+
+
+
+      - name: Zip the Build
         run: |
+          pwd
           ls -al target
           ls -al target/${{matrix.target}}
           file target/${{matrix.target}}/release/admin
           file target/${{matrix.target}}/release/server
+          
+          rm -rf target/${{matrix.target}}/release/admin.d
+          rm -rf target/${{matrix.target}}/release/admin.pdb
+          rm -rf target/${{matrix.target}}/release/server.d
+          rm -rf target/${{matrix.target}}/release/server.pdb
+          cd target/${{matrix.target}}/release
+          ls -al
+          zip -r ${{ matrix.target.triple }}.zip admin* server*
+          mv ${{ matrix.target.triple }}.zip ../../
+
+      - name: Get current Commit ID
+        id: commitid
+        run: git rev-parse --short HEAD
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: ${{ steps.date.outputs.commitid }}
+          release_name: ${{ steps.date.outputs.commitid }}
+          body: TODO New Release.
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ matrix.target.triple }}.zip
+          asset_name: ${{ matrix.target.triple }}.zip
+          asset_content_type: application/zip
+
+      - name: Clear the cargo caches
+        run: |
+          cargo install cargo-cache --version 0.8.2 --no-default-features --features ci-autoclean
+          cargo-cache
