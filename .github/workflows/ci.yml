@@ -81,7 +81,6 @@ jobs:
           cd target/${{matrix.target}}/release
           ls -al
           sudo zip -r ${{ matrix.target.triple }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
-          cp ${{ matrix.target.triple }}.zip ../../
 
       - name: Get current Commit ID
         id: commitid
@@ -105,7 +104,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ matrix.target.triple }}.zip
+          asset_path: ./target/${{matrix.target}}/release/${{ matrix.target.triple }}.zip
           asset_name: ${{ matrix.target.triple }}.zip
           asset_content_type: application/zip
 
