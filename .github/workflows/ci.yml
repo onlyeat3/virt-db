@@ -50,7 +50,22 @@ jobs:
         with:
           command: build
           args: --release --target=${{ matrix.target }}
+      - name: Build x86_64
+        uses: actions-rs/cargo@v1
+        if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl' }}
+        env:
+          TARGET_CC: clang
+          OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu/
+          OPENSSL_INCLUDE_DIR: /usr/include/openssl/
+        with:
+          command: build
+          args: --release --target=${{ matrix.target }}
 
+      - name: Build Linux Musl
+        uses: stevenleadbeater/rust-musl-builder@master
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
+        with:
+          args: /bin/bash -c "cargo build --release --target=${{ matrix.target }}"
       - name: Check Artifact
         run: |
           ls -al target/release
