@@ -43,7 +43,7 @@ jobs:
         if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' }}
         env:
           TARGET_CC: clang
-          OPENSSL_LIB_DIR: /usr/lib/i386-linux-gnu/
+          OPENSSL_LIB_DIR: /usr/lib/${{matrix.target}}/
           OPENSSL_INCLUDE_DIR: /usr/include/openssl/
         with:
           command: build
