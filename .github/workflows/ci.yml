@@ -46,9 +46,6 @@ jobs:
           export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
           export LD_LIBRARY_PATH=$PREFIX
           
-          sudo apt-get source libssl-dev
-          sudo apt build-dep libssl-dev
-          
           mkdir $PREFIX && \
           echo "$PREFIX/lib" >> /etc/ld-musl-x86_64.path && \
           ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/x86_64-linux-musl/asm && \
