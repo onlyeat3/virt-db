@@ -36,7 +36,7 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    sys_log::init_logger()?;
+    sys_log::init_logger().unwrap();
     let settings: BasicSettings<ApplicationSettings> = config::app_config::load_config();
     env::set_var("DATABASE_URL", settings.application.mysql_url.as_str());
     let mut opt = ConnectOptions::new(settings.application.mysql_url.as_str().to_owned());
