@@ -62,7 +62,7 @@ jobs:
           args: --release --target=${{ matrix.target }}
 
       - name: Build Linux Musl
-        uses: stevenleadbeater/rust-musl-builder@master
+        uses: stevenleadbeater/rust-musl-builder@0.0.1
         if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
         with:
           args: /bin/bash -c "cargo build --release --target=${{ matrix.target }}"
