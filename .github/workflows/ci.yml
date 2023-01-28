@@ -42,14 +42,7 @@ jobs:
         with:
           command: build
           args: --release --target=${{ matrix.target }}
-      - name: Build x86_64
-        uses: actions-rs/cargo@v1
-        if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' }}
-        env:
-          TARGET_CC: clang
-        with:
-          command: build
-          args: --release --target=${{ matrix.target }}
+
       - name: Build x86_64
         uses: actions-rs/cargo@v1
         if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl' }}
