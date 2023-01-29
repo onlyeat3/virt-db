@@ -6,6 +6,7 @@ jobs:
   linux:
     name: Linux
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       matrix:
         target:
@@ -102,6 +103,7 @@ jobs:
   windows:
     name: x86_64-pc-windows-msvc
     runs-on: windows-2022
+    continue-on-error: true
     strategy:
       matrix:
         target:
@@ -161,7 +163,6 @@ jobs:
       - linux
       - windows
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
