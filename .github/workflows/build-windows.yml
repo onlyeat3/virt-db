@@ -65,7 +65,7 @@ jobs:
         run: echo "::set-output name=branch::$(git rev-parse --abbrev-ref HEAD)"
 
       - name: Release
-      - uses: meeDamian/github-release@2.0
+        uses: meeDamian/github-release@2.0
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
           tag: ${{ steps.branch.outputs.branch }}
