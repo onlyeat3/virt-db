@@ -38,7 +38,6 @@ jobs:
           sudo apt-get update && sudo apt-get install pkg-config libssl-dev clang
 
       - name: Build x86
-        timeout-minutes: 300
         uses: actions-rs/cargo@v1
         if: ${{ matrix.target == 'i686-pc-windows-gnu' || matrix.target == 'i686-unknown-linux-gnu' }}
         env:
@@ -50,7 +49,6 @@ jobs:
           args: --release --target=${{ matrix.target }}
 
       - name: Build x86_64
-        timeout-minutes: 300
         uses: actions-rs/cargo@v1
         if: ${{ matrix.target != 'i686-pc-windows-gnu' && matrix.target != 'i686-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl' }}
         env:
@@ -62,7 +60,6 @@ jobs:
           args: --release --target=${{ matrix.target }}
 
       - name: Build Linux Musl
-        timeout-minutes: 300
         uses: jean-dfinity/rust-musl-action@master
         if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
         with:
