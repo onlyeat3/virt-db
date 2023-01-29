@@ -91,8 +91,8 @@ jobs:
         with:
           name: ${{ matrix.target }}
           path: |
-            ./target/${{matrix.target}}/release/admin
-            ./target/${{matrix.target}}/release/server
+            target/${{matrix.target}}/release/admin
+            target/${{matrix.target}}/release/server
 
       - name: Clear the cargo caches
         run: |
@@ -148,8 +148,8 @@ jobs:
         with:
           name: ${{ matrix.target }}
           path: |
-            ./target/${{matrix.target}}/release/admin.exe
-            ./target/${{matrix.target}}/release/server.exe
+            target/${{matrix.target}}/release/admin.exe
+            target/${{matrix.target}}/release/server.exe
       - name: Clear the cargo caches
         run: |
           cargo install cargo-cache --version 0.8.2 --no-default-features --features ci-autoclean
@@ -168,7 +168,22 @@ jobs:
         with:
           path: ./artifacts
       - name: Display structure of downloaded files
-        run: ls -R
+        run: ls -alh
+        working-directory: ./artifacts
+      - name: Zip files
+        run: |
+          tee zip_files.sh <<-'EOF'
+          #!/bin/bash
+          FILE=`ls`
+          for i in $FILE
+          do
+          cd $i
+          zip -rq $i.zip .
+          mv $i.zip ../
+          cd ..
+          done
+          EOF
+          sh zip_files.sh
         working-directory: ./artifacts
 
       - name: Get current Branch
