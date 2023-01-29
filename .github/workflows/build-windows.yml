@@ -53,6 +53,7 @@ jobs:
           name: ${{ matrix.target }}.zip
           path: |
             ./target/${{matrix.target}}/release/admin.exe
+            ./target/${{matrix.target}}/release/server.exe
       - name: Clear the cargo caches
         run: |
           cargo install cargo-cache --version 0.8.2 --no-default-features --features ci-autoclean
