@@ -197,7 +197,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
-          tag_name: ${{ steps.branch.outputs.branch }}
+          tag_name: v${{ steps.branch.outputs.branch }}
           release_name: ${{ steps.branch.outputs.branch }}
           body: |
             TODO New Release.
