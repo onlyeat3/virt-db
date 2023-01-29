@@ -1,9 +1,9 @@
 on: [ push ]
 
-name: BuildLinux
+name: Build and Release
 
 jobs:
-  build:
+  linux:
     name: Linux
     runs-on: ubuntu-latest
     strategy:
@@ -89,7 +89,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.target }}.zip
+          name: ${{ matrix.target }}
           path: |
             ./target/${{matrix.target}}/release/admin
             ./target/${{matrix.target}}/release/server
@@ -98,3 +98,92 @@ jobs:
         run: |
           cargo install cargo-cache --version 0.8.2 --no-default-features --features ci-autoclean
           cargo-cache
+
+  windows:
+    name: x86_64-pc-windows-msvc
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+        version:
+          - nightly
+    steps:
+      - uses: actions/checkout@v2
+      # install OpenSSL on Windows
+      # TODO: GitHub actions docs state that OpenSSL is
+      # already installed on these Windows machines somewhere
+      - name: Set vcpkg root
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Install OpenSSL
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: vcpkg install openssl:x64-windows
+
+      - name: Install ${{ matrix.version }}
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{matrix.version}}
+          target: ${{ matrix.target }}
+          override: true
+      - name: workaround MSRV issues
+        if: matrix.version != 'stable'
+        run: |
+          cargo update -p=zstd-sys --precise=2.0.1+zstd.1.5.2
+      - name: Cache Dependencies
+        uses: Swatinem/rust-cache@v1.2.0
+
+      - name: Build
+        run: |
+          cargo +nightly build --target=${{ matrix.target }} --release
+
+      - name: Show Artifacts
+        run: |
+          pwd
+          ls target
+          ls target/${{matrix.target}}/release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            ./target/${{matrix.target}}/release/admin.exe
+            ./target/${{matrix.target}}/release/server.exe
+      - name: Clear the cargo caches
+        run: |
+          cargo install cargo-cache --version 0.8.2 --no-default-features --features ci-autoclean
+          cargo-cache
+
+  release:
+    name: Create Github Release
+    needs:
+      - linux
+      - windows
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          path: /artifacts
+      - name: Display structure of downloaded files
+        run: ls -R
+        working-directory: /artifacts
+
+      - name: Get current Branch
+        id: branch
+        run: echo "::set-output name=branch::$(git branch| tr -d '* ')"
+      - name: Duplicate Release With Asset to public_Repo
+        id: Release-AIO
+        uses: Hs1r1us/Release-AIO@v2.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: ${{ steps.branch.outputs.branch }}
+          release_name: ${{ steps.branch.outputs.branch }}
+          body: |
+            TODO New Release.
+          draft: false
+          prerelease: false
+          asset_files: '/artifacts'
