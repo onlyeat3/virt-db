@@ -1,0 +1,26 @@
+on: [ push ]
+
+name: Build
+
+jobs:
+  release:
+    name: Create Github Release
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Get current Branch
+        id: branch
+        run: echo "::set-output name=branch::$(git branch| tr -d '* ')"
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: ${{ steps.branch.outputs.branch }}
+          release_name: ${{ steps.branch.outputs.branch }}
+          body: TODO New Release.
+          draft: false
+          prerelease: false
+          allowUpdates: true

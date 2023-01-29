@@ -4,14 +4,12 @@ name: Build
 
 jobs:
   build:
-    name: ${{ matrix.target.name }} / ${{ matrix.version }}
-    runs-on: ${{ matrix.target.os }}
+    name: x86_64-pc-windows-msvc
+    runs-on: windows-2022
     strategy:
       matrix:
         target:
-#          - { name: Linux, os: ubuntu-latest, triple: x86_64-unknown-linux-gnu }
-#          - { name: macOS, os: macos-latest, triple: x86_64-apple-darwin }
-          - { name: Windows, os: windows-2022, triple: x86_64-pc-windows-msvc }
+          - x86_64-pc-windows-msvc
         version:
           - nightly
     steps:
@@ -20,10 +18,10 @@ jobs:
       # TODO: GitHub actions docs state that OpenSSL is
       # already installed on these Windows machines somewhere
       - name: Set vcpkg root
-        if: matrix.target.triple == 'x86_64-pc-windows-msvc'
+        if: matrix.target == 'x86_64-pc-windows-msvc'
         run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Install OpenSSL
-        if: matrix.target.triple == 'x86_64-pc-windows-msvc'
+        if: matrix.target == 'x86_64-pc-windows-msvc'
         run: vcpkg install openssl:x64-windows
 
       - name: Install ${{ matrix.version }}
@@ -31,7 +29,7 @@ jobs:
         with:
           profile: minimal
           toolchain: ${{matrix.version}}
-          target: ${{ matrix.target.triple }}
+          target: ${{ matrix.target }}
           override: true
       - name: workaround MSRV issues
         if: matrix.version != 'stable'
@@ -41,26 +39,26 @@ jobs:
         uses: Swatinem/rust-cache@v1.2.0
 
       - name: build
-        if: ${{ matrix.target.triple != 'x86_64-unknown-linux-musl'}}
+        if: ${{ matrix.target != 'x86_64-unknown-linux-musl'}}
         run: |
-          cargo +nightly build --target=${{ matrix.target.triple }} --release
+          cargo +nightly build --target=${{ matrix.target }} --release
       - name: Build Linux Musl
         uses: jean-dfinity/rust-musl-action@master
-        if: ${{ matrix.target.triple == 'x86_64-unknown-linux-musl'}}
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
         with:
-          args: rustup default nightly && rustup target add x86_64-unknown-linux-musl && cargo +nightly build --target=${{ matrix.target.triple }} --release
+          args: rustup default nightly && rustup target add x86_64-unknown-linux-musl && cargo +nightly build --target=${{ matrix.target }} --release
 
       - name: Zip the Build
         run: |
           pwd
           ls -al target
-          ls -al target/${{matrix.target.triple}}
-          file target/${{matrix.target.triple}}/release/admin
-          file target/${{matrix.target.triple}}/release/server
+          ls -al target/${{matrix.target}}
+          file target/${{matrix.target}}/release/admin
+          file target/${{matrix.target}}/release/server
           
-          cd target/${{matrix.target.triple}}/release
+          cd target/${{matrix.target}}/release
           ls -al
-          sudo zip -r ${{ matrix.target.triple }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
+          sudo zip -r ${{ matrix.target }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
 
       - name: Get current Commit ID
         id: branch
@@ -85,8 +83,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/${{matrix.target.triple}}/release/${{ matrix.target.triple }}.zip
-          asset_name: ${{ matrix.target.triple }}.zip
+          asset_path: ./target/${{matrix.target}}/release/${{ matrix.target }}.zip
+          asset_name: ${{ matrix.target }}.zip
           asset_content_type: application/zip
 
       - name: Clear the cargo caches
