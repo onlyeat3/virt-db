@@ -1,6 +1,6 @@
 on: [ push ]
 
-name: Build
+name: BuildWindows
 
 jobs:
   build:
@@ -38,46 +38,21 @@ jobs:
       - name: Cache Dependencies
         uses: Swatinem/rust-cache@v1.2.0
 
-      - name: build
-        if: ${{ matrix.target != 'x86_64-unknown-linux-musl'}}
+      - name: Build
         run: |
           cargo +nightly build --target=${{ matrix.target }} --release
-      - name: Build Linux Musl
-        uses: jean-dfinity/rust-musl-action@master
-        if: ${{ matrix.target == 'x86_64-unknown-linux-musl'}}
-        with:
-          args: rustup default nightly && rustup target add x86_64-unknown-linux-musl && cargo +nightly build --target=${{ matrix.target }} --release
 
-      - name: Zip the Build
+      - name: Show Artifacts
         run: |
           pwd
-          ls -al target
-          ls -al target/${{matrix.target}}
-          file target/${{matrix.target}}/release/admin
-          file target/${{matrix.target}}/release/server
-          
-          cd target/${{matrix.target}}/release
-          ls -al
-          sudo zip -r ${{ matrix.target }}.zip admin* server* -x admin.d -x admin.pdb -x server.d -x server.pdb
-
-      - name: Get current Commit ID
-        id: branch
-        run: echo "::set-output name=branch::$(git rev-parse --abbrev-ref HEAD)"
-
-      - name: Release
-        uses: meeDamian/github-release@2.0
+          ls target
+          ls target/${{matrix.target}}/release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
         with:
-          token: ${{ secrets.RELEASE_TOKEN }}
-          tag: ${{ steps.branch.outputs.branch }}
-          name: ${{ steps.branch.outputs.branch }}
-          allow_override: true
-          draft: true
-          body: >
-            TODO New Release.
-          gzip: folders
-          files: >
-            ${{ matrix.target.triple }}.zip:./target/${{matrix.target.triple}}/release/${{ matrix.target.triple }}.zip 
-
+          name: ${{ matrix.target }}.zip
+          path: |
+          ./target/${{matrix.target}}/release/admin.exe
       - name: Clear the cargo caches
         run: |
           cargo install cargo-cache --version 0.8.2 --no-default-features --features ci-autoclean
