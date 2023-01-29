@@ -64,28 +64,19 @@ jobs:
         id: branch
         run: echo "::set-output name=branch::$(git rev-parse --abbrev-ref HEAD)"
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      - name: Release
+      - uses: meeDamian/github-release@2.0
         with:
-          tag_name: ${{ steps.branch.outputs.branch }}
-          release_name: ${{ steps.branch.outputs.branch }}
-          body: TODO New Release.
-          draft: false
-          prerelease: false
-          allowUpdates: true
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/${{matrix.target}}/release/${{ matrix.target }}.zip
-          asset_name: ${{ matrix.target }}.zip
-          asset_content_type: application/zip
+          token: ${{ secrets.RELEASE_TOKEN }}
+          tag: ${{ steps.branch.outputs.branch }}
+          name: ${{ steps.branch.outputs.branch }}
+          allow_override: true
+          draft: true
+          body: >
+            TODO New Release.
+          gzip: folders
+          files: >
+            ${{ matrix.target.triple }}.zip:./target/${{matrix.target.triple}}/release/${{ matrix.target.triple }}.zip 
 
       - name: Clear the cargo caches
         run: |
