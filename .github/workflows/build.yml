@@ -184,6 +184,7 @@ jobs:
           done
           EOF
           sh zip_files.sh
+          rm -rf zip_files.sh
         working-directory: ./artifacts
 
       - name: Get current Branch
