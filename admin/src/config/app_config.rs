@@ -10,6 +10,7 @@ use std::sync::Arc;
 pub struct ApplicationSettings {
     pub jwt_secret: String,
     pub mysql_url: String,
+    pub static_dir: String,
 }
 
 pub static mut SETTINGS: Option<BasicSettings<ApplicationSettings>> = None;

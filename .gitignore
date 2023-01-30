@@ -3,3 +3,4 @@
 .idea/
 server/config.toml
 Cargo.lock
+admin/dist

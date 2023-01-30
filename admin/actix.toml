@@ -72,3 +72,4 @@ private-key = "path/to/cert/key.pem"
 [application]
 jwt-secret="replace_it"
 mysql-url="mysql://root:root@localhost:3306/virt-db-meta"
+static-dir="admin/dist"

@@ -69,14 +69,14 @@ async fn main() -> std::io::Result<()> {
                 .app_data(web::Data::new(app_state.clone()))
                 .wrap(
                     Cors::default()
-                        .allowed_origin("http://localhost:8848")
+                        .allow_any_origin()
                         // .allow_any_origin()
                         .allow_any_method()
                         .allow_any_header()
                         .supports_credentials()
                         .max_age(3600),
                 )
-                .service(controller::index_controller::index)
+                // .service(controller::index_controller::index)
                 .service(controller::user_controller::login)
                 .service(controller::user_controller::update_password)
                 .service(controller::user_controller::get_user_info)
@@ -86,6 +86,9 @@ async fn main() -> std::io::Result<()> {
                 .service(cache_config_controller::delete)
                 .service(vt_node_controller::register)
                 .service(metric_history_controller::list_sql)
+
+                // 必须在最后
+                .service(actix_files::Files::new( "/",settings.application.clone().static_dir).index_file("index.html"))
         }
     })
     .apply_settings(&settings)
