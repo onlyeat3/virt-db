@@ -4,3 +4,4 @@
 server/config.toml
 Cargo.lock
 admin/dist
+tmp/
