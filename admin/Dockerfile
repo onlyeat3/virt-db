@@ -1,19 +1,23 @@
-FROM clux/muslrust:stable AS builder
 
-ARG branch=main
+FROM clux/muslrust:stable AS builder-rust
+ARG branch
+
 COPY . .
-RUN git clone https://github.com/onlyeat3/virt-db-admin-ui \
-    && cd virt-db-admin-ui \
-    && git checkout  ${main}\
-    && pnpm install \
-    && pnpm build
-RUN cargo build --release --bin admin
+RUN echo '[source.crates-io]\n\
+           replace-with = "tuna"\n\
+           \n\
+           [source.tuna]\n\
+           registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"' \
+    >> .cargo/config.toml
+RUN rustup default nightly \
+    && rustup target add x86_64-unknown-linux-musl \
+    && cargo +nightly build --target=x86_64-unknown-linux-musl --release --bin admin
+
 
 FROM alpine:3.17.1
 RUN apk add vim curl
 
-COPY --from=builder /volume/target/x86_64-unknown-linux-musl/release/admin /app/
-COPY --from=builder /volume/virt-db-admin-ui/dist /app/
-RUN ls -al /app
+COPY --from=builder-rust /volume/target/x86_64-unknown-linux-musl/release/admin /app/
+COPY admin/dist /app/
 EXPOSE 8080
 ENTRYPOINT ["/app/admin"]

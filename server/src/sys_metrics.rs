@@ -89,7 +89,7 @@ pub async fn remove_exec_logs(expired_exec_log_list: &Vec<ExecLog>) {
     let locked_result = EXEC_LOG_LIST_MUTEX.lock();
     match locked_result {
         Ok(mut exec_log_list) => {
-            exec_log_list.drain_filter(|ele| {
+            exec_log_list.retain(|ele| {
                 for expired_exec_log in expired_exec_log_list {
                     if ele == expired_exec_log {
                         return true;
