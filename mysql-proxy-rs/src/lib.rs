@@ -12,6 +12,7 @@ extern crate tokio_core;
 extern crate tokio;
 
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind, Read, Write};
 use std::net::Shutdown;
@@ -61,7 +62,8 @@ pub enum Action {
 /// Packet handlers need to implement this trait
 pub trait PacketHandler {
     fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_package_writer: &mut PacketWriter) -> Action;
-    fn handle_response(&mut self, p: &Packet) -> Action;
+    fn handle_response(&mut self, p: &Packet,sql:Option<&String>) -> Action;
+    fn get_cached_sqls(&mut self) -> Rc<RefCell<Vec<String>>>;
 }
 
 /// A packet is just a wrapper for a Vec<u8>
@@ -287,7 +289,7 @@ impl<H> Pipe<H>
             server_writer: ConnWriter::new(server),
             // proxy_client_reader: PacketReader::new(client.clone()),
             client_packet_writer: PacketWriter::new(client),
-            handler: handler,
+            handler,
         }
     }
 }
@@ -300,11 +302,18 @@ impl<H> Future for Pipe<H>
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
+        let sqls = self.handler.get_cached_sqls();
         loop {
             let client_read = self.client_reader.read();
 
             // process buffered requests
             while let Some(request) = self.client_reader.next() {
+                let slice = &request.bytes[5..];
+                // convert the slice to a String object
+                if let Ok(sql) = String::from_utf8(slice.to_vec()){
+                    (*sqls).borrow_mut().push(sql.clone());
+                    // info!("push sql:{:?}",sql);
+                };
                 match self
                     .handler
                     .handle_request(&request, &self.client_reader, &self.client_writer,&mut self.client_packet_writer)
@@ -326,10 +335,12 @@ impl<H> Future for Pipe<H>
 
             // try reading from server
             let server_read = self.server_reader.read();
-
+            // info!("sqls:{:?}",sqls);
+            let mut idx = 0;
             // process buffered responses
             while let Some(response) = self.server_reader.next() {
-                match self.handler.handle_response(&response) {
+                let mut current_sqls = sqls.as_ref().borrow_mut();
+                match self.handler.handle_response(&response, current_sqls.get(idx)) {
                     Action::Drop => {}
                     Action::Forward => self.client_writer.push(&response),
                     Action::Mutate(ref p2) => self.client_writer.push(p2),
@@ -343,6 +354,10 @@ impl<H> Future for Pipe<H>
                         self.client_writer.push(&error_packet);
                     }
                 };
+                if current_sqls.len() >= idx+1{
+                    current_sqls.remove(idx);
+                }
+                idx = idx + 1;
             }
 
             // perform all of the writes at the end, since the request handlers may have

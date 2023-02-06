@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 use std::{env, iter};
+use std::cell::RefCell;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -97,6 +98,7 @@ pub fn run(client: TcpStream, server: TcpStream,mysql_conn:Conn, redis_conn: Con
         _redis_conn: redis_conn,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
+        sqls:Rc::new(RefCell::new(vec![])),
     })
 }
 
@@ -107,6 +109,7 @@ pub struct VirtDBMySQLHandler {
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     dialect: MySqlDialect,
     server_config: VirtDBConfig,
+    sqls:Rc<RefCell<Vec<String>>>,
 }
 
 impl PacketHandler for VirtDBMySQLHandler {
@@ -138,10 +141,34 @@ impl PacketHandler for VirtDBMySQLHandler {
         }
     }
 
-    fn handle_response(&mut self, packet: &Packet) -> Action {
+    fn handle_response(&mut self, packet: &Packet, sql: Option<&String>) -> Action {
         // forward all responses to the client
-        // print_packet_chars(&*packet.bytes);
-        println!();
+        println!("sql:{:?}",sql);
+        print_packet_chars(&*packet.bytes);
         Action::Forward
     }
+
+    fn get_cached_sqls(&mut self) -> Rc<RefCell<Vec<String>>> {
+        self.sqls.clone()
+    }
+}
+
+
+#[allow(dead_code)]
+pub fn print_packet_chars(buf: &[u8]) {
+    for i in 0..buf.len() {
+        print!("{}", buf[i] as char);
+    }
+}
+
+#[allow(dead_code)]
+pub fn print_packet_bytes(buf: &[u8]) {
+    print!("[");
+    for i in 0..buf.len() {
+        if i % 8 == 0 {
+            println!("");
+        }
+        print!("{:#04x} ", buf[i]);
+    }
+    println!("]");
 }
