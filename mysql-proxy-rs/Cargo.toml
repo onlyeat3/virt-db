@@ -1,0 +1,39 @@
+[package]
+name = "mysql-proxy"
+description = "Extensible MySQL Proxy"
+version = "0.2.1"
+authors = ["Andy Grove <andygrove73@gmail.com>"]
+homepage = "https://github.com/AgilData/mysql-proxy-rs"
+documentation = "https://github.com/AgilData/mysql-proxy-rs"
+repository = "https://github.com/AgilData/mysql-proxy-rs"
+license = "Apache-2.0"
+edition = "2021"
+
+[features]
+default = ["tls"]
+tls = ["tokio-rustls", "pin-project-lite"]
+
+[dependencies]
+log = "0.3"
+tokio-core = "0.1.18"
+env_logger = "0.3"
+futures = "0.1"
+
+async-trait = "0.1.52"
+byteorder = "1.4.3"
+chrono = "0.4.20"
+mysql_common = { version = "0.29.0", features = ["chrono"] }
+nom = "7.1.0"
+tokio = { version = "1.17.0", features = ["io-util", "io-std"] }
+tokio-rustls = { version = "0.23.4", optional = true }
+pin-project-lite = { version = "0.2.9", optional = true }
+
+[dev-dependencies]
+mysql = "23.0.1"
+mysql_async = "0.31.0"
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+rcgen = "0.8.14"
+tempfile = "3.3.0"
+native-tls = "0.2.8"
+rustls-pemfile = { version = "1.0" }
