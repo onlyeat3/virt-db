@@ -1,4 +1,4 @@
-#![allow(unused_imports,dead_code)]
+#![allow(unused_imports, dead_code)]
 #[macro_use]
 extern crate log;
 extern crate core;
@@ -8,6 +8,7 @@ extern crate lazy_static;
 use clap::{AppSettings, Parser};
 use log::{error, info};
 use std::error::Error;
+use tokio::runtime::Builder;
 
 use crate::server::start;
 use crate::sys_metrics::enable_node_live_refresh_job;
@@ -31,23 +32,28 @@ struct CliArgs {
     config_file: String,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let cli_args = CliArgs::parse();
     sys_log::init_logger()?;
 
-    let sys_config_wrapper = sys_config::parse_config(&cli_args.config_file).await;
+    let sys_config_wrapper = sys_config::parse_config(&cli_args.config_file);
     if let Err(err) = sys_config_wrapper {
         error!("Read config file fail:{:?}", err);
         return Err(Box::try_from(err).unwrap());
     }
     let sys_config = sys_config_wrapper.unwrap();
+    let virt_db_config = sys_config.clone();
 
-    sys_metrics::enable_metrics(sys_config.clone());
-    meta::enable_meta_refresh_job(sys_config.clone()).await;
-    enable_node_live_refresh_job(sys_config.clone()).await;
+    let rt = Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async move {
+        sys_metrics::enable_metrics(sys_config.clone());
+        meta::enable_meta_refresh_job(sys_config.clone()).await;
+        enable_node_live_refresh_job(sys_config.clone()).await;
+    });
 
-    let r = start(sys_config.clone());
-    info!("virt-db Starting at 0.0.0.0:{}",sys_config.server.port);
-    return r.await;
+    start(virt_db_config).unwrap();
+    Ok(())
 }

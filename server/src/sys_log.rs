@@ -51,7 +51,7 @@ pub fn init_logger() -> anyhow::Result<()> {
         //     .appender("file")
         //     .additive(false)
         //     .build("app::requests", LevelFilter::Info))
-        .build(Root::builder().appender("stdout").appender("file").build(LevelFilter::Info))
+        .build(Root::builder().appender("stdout").appender("file").build(LevelFilter::Trace))
         .unwrap();
 
     let handle = log4rs::init_config(config).unwrap();

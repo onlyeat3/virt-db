@@ -15,7 +15,9 @@ chrono = "0.4.19"
 mysql_common = { version = "0.29.0", features = ["chrono"] }
 nom = "7.1.0"
 tokio = { version = "1.17.0", features = ["full"] }
-opensrv-mysql = "0.3.0"
+futures = "0.1"
+mysql-proxy-rs = {version="0.2.1",path="../mysql-proxy-rs"}
+tokio-core = "0.1.18"
 mysql_async = "0.30.0"
 sqlx = { version = "0.6", features = [ "runtime-tokio-rustls" , "mysql" ] }
 

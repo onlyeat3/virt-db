@@ -1,9 +1,9 @@
 #![allow(unused_imports)]
 use std::error::Error;
+use std::fs;
 use log::{debug, error, info, trace};
 use serde_derive::Deserialize;
 use std::path::{Path, PathBuf};
-use tokio::fs;
 use toml;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -75,7 +75,7 @@ pub struct MetaDbConfig {
     pub refresh_duration_in_seconds: u64,
 }
 
-pub async fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Error> {
+pub fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Error> {
     let mut base_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let real_config_file = if Path::new(config_file).exists() {
         config_file
@@ -91,7 +91,7 @@ pub async fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Er
             real_config_file_path.to_path_buf()
         );
     }
-    let toml_str = fs::read_to_string(real_config_file).await?;
+    let toml_str = fs::read_to_string(real_config_file)?;
     let virt_db_config: VirtDBConfig = toml::from_str(toml_str.as_str()).unwrap();
     return Ok(virt_db_config);
 }

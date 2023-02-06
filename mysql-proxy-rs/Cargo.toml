@@ -1,5 +1,5 @@
 [package]
-name = "mysql-proxy"
+name = "mysql-proxy-rs"
 description = "Extensible MySQL Proxy"
 version = "0.2.1"
 authors = ["Andy Grove <andygrove73@gmail.com>"]

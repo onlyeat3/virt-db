@@ -25,6 +25,7 @@ use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor::Core;
 use mysql_proxy::packet_writer::PacketWriter;
 use mysql_proxy::resultset::QueryResultWriter;
+use mysql_proxy_rs::Pipe;
 
 fn main() {
     env_logger::init().unwrap();
@@ -135,7 +136,7 @@ impl PacketHandler for DemoHandler {
 #[allow(dead_code)]
 pub fn print_packet_chars(buf: &[u8]) {
     for i in 0..buf.len() {
-        print!("{} ", buf[i] as char);
+        print!("{}", buf[i] as char);
     }
 }
 
