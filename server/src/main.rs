@@ -4,6 +4,13 @@ extern crate log;
 extern crate core;
 extern crate tokio;
 extern crate lazy_static;
+extern crate byteorder;
+#[macro_use]
+extern crate futures;
+extern crate mysql_common as myc;
+extern crate mysql_common;
+#[macro_use]
+extern crate tokio_core;
 
 use clap::{AppSettings, Parser};
 use log::{error, info};
@@ -22,6 +29,7 @@ mod sys_config;
 mod sys_log;
 mod utils;
 mod math;
+mod protocol;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

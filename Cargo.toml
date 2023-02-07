@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "mysql-proxy-rs",
     "server",
     "admin"
 ]

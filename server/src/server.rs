@@ -1,7 +1,9 @@
 #![allow(unused_imports)]
 
 use std::{env, iter};
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -11,17 +13,17 @@ use chrono::Local;
 use futures::Future;
 use futures::stream::Stream;
 use mysql_async::Conn;
-use redis::{Commands, Connection, RedisError};
+use mysql_async::prelude::Query;
+use redis::{Commands, Connection, RedisError, RedisResult};
 use sqlparser::dialect::MySqlDialect;
 use tokio::runtime::Builder;
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor::Core;
 
-use mysql_proxy_rs::{Action, ConnReader, ConnWriter, OkResponse, Packet, PacketHandler, PacketType, Pipe};
-use mysql_proxy_rs::packet_writer::PacketWriter;
-use mysql_proxy_rs::resultset::QueryResultWriter;
 use crate::{meta, sys_metrics, utils};
 use crate::meta::CacheConfigEntity;
+use crate::protocol::{Action, ConnectionContext, ConnReader, ConnWriter, Packet, PacketHandler, PacketType, Pipe};
+use crate::protocol::packet_writer::PacketWriter;
 
 // use crate::mysql_protocol::MySQL;
 use crate::sys_config::{ServerConfig, VirtDBConfig};
@@ -102,7 +104,7 @@ pub fn run(client: TcpStream, server: TcpStream, mysql_conn: Conn, redis_conn: C
         _redis_conn: redis_conn,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
-        sqls: Rc::new(RefCell::new(vec![])),
+        context: Rc::new(RefCell::new(ConnectionContext { sql: None, should_update_cache: false })),
     })
 }
 
@@ -113,11 +115,11 @@ pub struct VirtDBMySQLHandler {
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     dialect: MySqlDialect,
     server_config: VirtDBConfig,
-    sqls: Rc<RefCell<Vec<String>>>,
+    context: Rc<RefCell<ConnectionContext>>,
 }
 
 impl PacketHandler for VirtDBMySQLHandler {
-    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_packet_writer: &mut PacketWriter) -> (Action,bool) {
+    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_packet_writer: &mut PacketWriter) -> Action {
         // print_packet_chars(&p.bytes);
         match p.packet_type() {
             Ok(PacketType::ComQuery) => {
@@ -126,7 +128,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                 // convert the slice to a String object
                 let sql = String::from_utf8(slice.to_vec()).expect("Invalid UTF-8");
 
-                let sql_str = utils::normally(&self.dialect,sql.as_str());
+                let sql_str = utils::normally(&self.dialect, sql.as_str());
                 let mut mysql_duration = 0;
                 let mut redis_duration = 0;
                 let mut from_cache = false;
@@ -149,7 +151,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                     }
                 }
                 if cache_config_entity_option.is_none() {
-                    return (Action::Forward,false);
+                    return Action::Forward;
                 }
                 let redis_get_start_time = Local::now();
                 let cached_value_result: Result<String, RedisError> = self._redis_conn.get(redis_key.clone());
@@ -158,7 +160,6 @@ impl PacketHandler for VirtDBMySQLHandler {
 
                 if let Ok(redis_v) = cached_value_result {
                     from_cache = true;
-
                     trace!("redis_v:{:?}", redis_v);
 
                     sys_metrics::record_exec_log(ExecLog {
@@ -169,23 +170,48 @@ impl PacketHandler for VirtDBMySQLHandler {
                         from_cache,
                     });
                     let response_bytes = vec![];
-                    return (Action::Respond(response_bytes),false);
+                    return Action::Respond(response_bytes);
                 }
-                return (Action::Forward,true);
+                (&*self.context).borrow_mut().sql = Some(sql.clone());
+                return Action::Forward;
             }
-            _ => (Action::Forward,false),
+            _ => Action::Forward,
         }
     }
 
-    fn handle_response(&mut self, packet: &Packet, sql: Option<&String>) -> Action {
-        // forward all responses to the client
+    fn handle_response(&mut self, packet: &Packet) -> Action {
+        let sql_option = (&*self.context).borrow_mut().sql.clone();
+        if sql_option.is_none() {
+            return Action::Forward;
+        }
+        let sql = sql_option.clone().unwrap();
         println!("sql:{:?}", sql);
+
+        let redis_key = format!("cache:{:?}", sql);
         print_packet_chars(&*packet.bytes);
+        let bytes = &*packet.bytes.to_vec();
+        let mut chars = vec![];
+        for i in 0..bytes.len() {
+            chars.push(bytes[i] as char);
+        };
+        let redis_v:String = chars.iter()
+            .collect();
+        let rv: RedisResult<Vec<u8>> = self
+            ._redis_conn
+            .set_ex(
+                redis_key.clone(),
+                redis_v,
+                60 as usize,
+            );
+        if let Err(err) = rv {
+            warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err)
+        }
+        println!();
         Action::Forward
     }
 
-    fn get_cached_sqls(&mut self) -> Rc<RefCell<Vec<String>>> {
-        self.sqls.clone()
+    fn get_context(&mut self) -> Rc<RefCell<ConnectionContext>> {
+        self.context.clone()
     }
 }
 

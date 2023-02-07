@@ -1,17 +1,6 @@
 //! An extensible MySQL Proxy Server based on tokio-core
-extern crate byteorder;
-extern crate env_logger;
-#[macro_use]
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate mysql_common as myc;
-extern crate mysql_common;
-#[macro_use]
-extern crate tokio_core;
-extern crate tokio;
 
-
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind, Read, Write};
@@ -31,13 +20,7 @@ pub use crate::myc::constants::{CapabilityFlags, ColumnFlags, ColumnType, Status
 // pub use crate::tls::{plain_run_with_options, secure_run_with_options};
 
 pub mod packet_reader;
-pub mod commands;
 pub mod packet_writer;
-pub mod params;
-pub mod resultset;
-pub mod writers;
-pub mod value;
-pub mod errorcodes;
 
 
 /// Handlers return a variant of this enum to indicate how the proxy should handle the packet.
@@ -61,9 +44,15 @@ pub enum Action {
 
 /// Packet handlers need to implement this trait
 pub trait PacketHandler {
-    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_package_writer: &mut PacketWriter) -> (Action,bool);
-    fn handle_response(&mut self, p: &Packet,sql:Option<&String>) -> Action;
-    fn get_cached_sqls(&mut self) -> Rc<RefCell<Vec<String>>>;
+    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_package_writer: &mut PacketWriter) -> Action;
+    fn handle_response(&mut self, p: &Packet) -> Action;
+    fn get_context(&mut self) -> Rc<RefCell<ConnectionContext>>;
+}
+
+#[derive(Debug, PartialEq,Eq,Clone)]
+pub struct ConnectionContext{
+    pub sql:Option<String>,
+    pub should_update_cache:bool,
 }
 
 /// A packet is just a wrapper for a Vec<u8>
@@ -302,24 +291,17 @@ impl<H> Future for Pipe<H>
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
-        let sqls = self.handler.get_cached_sqls();
+        let mut ctx = self.handler.get_context();
         loop {
             let client_read = self.client_reader.read();
 
             // process buffered requests
             while let Some(request) = self.client_reader.next() {
                 let slice = &request.bytes[5..];
-                // convert the slice to a String object
-                if let Ok(sql) = String::from_utf8(slice.to_vec()){
-                    (*sqls).borrow_mut().push(sql.clone());
-                    // info!("push sql:{:?}",sql);
-                };
                 let handle_request_result = self
                     .handler
                     .handle_request(&request, &self.client_reader, &self.client_writer,&mut self.client_packet_writer);
-                let should_update_cache = handle_request_result.1;
-                match handle_request_result.0
-                {
+                match handle_request_result{
                     Action::Drop => {}
                     Action::Forward => self.server_writer.push(&request),
                     Action::Mutate(ref p2) => self.server_writer.push(p2),
@@ -333,16 +315,19 @@ impl<H> Future for Pipe<H>
                         self.client_writer.push(&error_packet);
                     }
                 };
+
+                if let Ok(sql) = String::from_utf8(slice.to_vec()){
+                    (&*ctx).borrow_mut().sql = Some(sql.clone());
+                    // info!("push sql:{:?}",sql);
+                };
             }
 
             // try reading from server
             let server_read = self.server_reader.read();
-            // info!("sqls:{:?}",sqls);
-            let mut idx = 0;
             // process buffered responses
             while let Some(response) = self.server_reader.next() {
-                let mut current_sqls = sqls.as_ref().borrow_mut();
-                match self.handler.handle_response(&response, current_sqls.get(idx)) {
+                info!("ctx:{:?}",ctx);
+                match self.handler.handle_response(&response) {
                     Action::Drop => {}
                     Action::Forward => self.client_writer.push(&response),
                     Action::Mutate(ref p2) => self.client_writer.push(p2),
@@ -356,10 +341,6 @@ impl<H> Future for Pipe<H>
                         self.client_writer.push(&error_packet);
                     }
                 };
-                if current_sqls.len() >= idx+1{
-                    current_sqls.remove(idx);
-                }
-                idx = idx + 1;
             }
 
             // perform all of the writes at the end, since the request handlers may have
@@ -408,57 +389,5 @@ fn parse_packet_length(header: &[u8]) -> usize {
     (((header[2] as u32) << 16) | ((header[1] as u32) << 8) | header[0] as u32) as usize
 }
 
-
-
-
-
-//------------------ begin
 // max payload size 2^(24-1)
 pub const U24_MAX: usize = 16_777_215;
-
-/// Meta-information abot a single column, used either to describe a prepared statement parameter
-/// or an output column.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Column {
-    /// This column's associated table.
-    ///
-    /// Note that this is *technically* the table's alias.
-    pub table: String,
-    /// This column's name.
-    ///
-    /// Note that this is *technically* the column's alias.
-    pub column: String,
-    /// This column's type>
-    pub coltype: ColumnType,
-    /// Any flags associated with this column.
-    ///
-    /// Of particular interest are `ColumnFlags::UNSIGNED_FLAG` and `ColumnFlags::NOT_NULL_FLAG`.
-    pub colflags: ColumnFlags,
-}
-
-/// QueryStatusInfo represents the status of a query.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct OkResponse {
-    /// header
-    pub header: u8,
-    /// affected rows in update/insert
-    pub affected_rows: u64,
-    /// insert_id in update/insert
-    pub last_insert_id: u64,
-    /// StatusFlags associated with this query
-    pub status_flags: StatusFlags,
-    /// Warnings
-    pub warnings: u16,
-    /// Extra infomation
-    pub info: String,
-    /// session state change information
-    pub session_state_info: String,
-}
-
-#[derive(Default)]
-struct StatementData {
-    long_data: HashMap<u16, Vec<u8>>,
-    bound_types: Vec<(myc::constants::ColumnType, bool)>,
-    params: u16,
-}
-//------------------ end

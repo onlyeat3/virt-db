@@ -19,8 +19,8 @@ use std::io::IoSlice;
 use std::rc::Rc;
 use futures::Async;
 
-use crate::U24_MAX;
 use tokio_core::net::TcpStream;
+use crate::protocol::U24_MAX;
 
 /// The writer of mysql packet.
 /// - behaves as a sync writer, while build the packet

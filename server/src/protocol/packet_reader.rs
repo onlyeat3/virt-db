@@ -234,8 +234,8 @@ impl<'a> AsRef<[u8]> for Packet<'a> {
     }
 }
 
-use crate::U24_MAX;
 use std::ops::Deref;
+use crate::protocol::U24_MAX;
 
 impl<'a> Deref for Packet<'a> {
     type Target = [u8];
