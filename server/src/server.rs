@@ -6,11 +6,12 @@ use std::net::SocketAddr;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use chrono::Local;
 
 use futures::Future;
 use futures::stream::Stream;
 use mysql_async::Conn;
-use redis::Connection;
+use redis::{Commands, Connection, RedisError};
 use sqlparser::dialect::MySqlDialect;
 use tokio::runtime::Builder;
 use tokio_core::net::{TcpListener, TcpStream};
@@ -19,9 +20,12 @@ use tokio_core::reactor::Core;
 use mysql_proxy_rs::{Action, ConnReader, ConnWriter, OkResponse, Packet, PacketHandler, PacketType, Pipe};
 use mysql_proxy_rs::packet_writer::PacketWriter;
 use mysql_proxy_rs::resultset::QueryResultWriter;
+use crate::{meta, sys_metrics, utils};
+use crate::meta::CacheConfigEntity;
 
 // use crate::mysql_protocol::MySQL;
 use crate::sys_config::{ServerConfig, VirtDBConfig};
+use crate::sys_metrics::ExecLog;
 
 // use opensrv_mysql::*;
 
@@ -75,7 +79,7 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
             let future = TcpStream::connect(&mysql_addr, &handle)
                 .and_then(move |mysql| Ok((socket, mysql)))
                 .and_then(move |(client, server)| {
-                    run(client, server, mysql_conn,redis_conn, sys_config.clone())
+                    run(client, server, mysql_conn, redis_conn, sys_config.clone())
                 });
 
             // tell the tokio reactor to run the future
@@ -92,13 +96,13 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-pub fn run(client: TcpStream, server: TcpStream,mysql_conn:Conn, redis_conn: Connection, sys_config: VirtDBConfig) -> Pipe<VirtDBMySQLHandler> {
+pub fn run(client: TcpStream, server: TcpStream, mysql_conn: Conn, redis_conn: Connection, sys_config: VirtDBConfig) -> Pipe<VirtDBMySQLHandler> {
     Pipe::new(Rc::new(client), Rc::new(server), VirtDBMySQLHandler {
         _mysql_connection: mysql_conn,
         _redis_conn: redis_conn,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
-        sqls:Rc::new(RefCell::new(vec![])),
+        sqls: Rc::new(RefCell::new(vec![])),
     })
 }
 
@@ -109,11 +113,11 @@ pub struct VirtDBMySQLHandler {
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     dialect: MySqlDialect,
     server_config: VirtDBConfig,
-    sqls:Rc<RefCell<Vec<String>>>,
+    sqls: Rc<RefCell<Vec<String>>>,
 }
 
 impl PacketHandler for VirtDBMySQLHandler {
-    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_packet_writer: &mut PacketWriter) -> Action {
+    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_packet_writer: &mut PacketWriter) -> (Action,bool) {
         // print_packet_chars(&p.bytes);
         match p.packet_type() {
             Ok(PacketType::ComQuery) => {
@@ -121,29 +125,61 @@ impl PacketHandler for VirtDBMySQLHandler {
                 let slice = &p.bytes[5..];
                 // convert the slice to a String object
                 let sql = String::from_utf8(slice.to_vec()).expect("Invalid UTF-8");
-                // log the query
-                info!("SQL: {}", sql);
 
-                // tokio::span(async {
-                //     let server_capabilities = CapabilityFlags::CLIENT_PROTOCOL_41
-                //         | CapabilityFlags::CLIENT_SECURE_CONNECTION
-                //         | CapabilityFlags::CLIENT_PLUGIN_AUTH
-                //         | CapabilityFlags::CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
-                //         | CapabilityFlags::CLIENT_CONNECT_WITH_DB
-                //         | CapabilityFlags::CLIENT_DEPRECATE_EOF;
-                //     let w = QueryResultWriter::new(client_packet_writer, false, server_capabilities);
-                //     w.completed(OkResponse::default()).await
-                // }).unwrap();
-                // Action::Drop
-                Action::Forward
+                let sql_str = utils::normally(&self.dialect,sql.as_str());
+                let mut mysql_duration = 0;
+                let mut redis_duration = 0;
+                let mut from_cache = false;
+                let fn_start_time = Local::now();
+
+                debug!("sql:{}", sql);
+                let redis_key = format!("cache:{:?}", sql);
+                let cache_config_entity_list = meta::get_cache_config_entity_list();
+
+                let mysql_dialect = MySqlDialect {};
+                let mut cache_config_entity_option: Option<&CacheConfigEntity> = None;
+                for entity in cache_config_entity_list {
+                    if utils::is_pattern_match(
+                        &*entity.sql_template.to_uppercase().trim(),
+                        sql.to_uppercase().trim(),
+                        &mysql_dialect,
+                    ) {
+                        cache_config_entity_option = Some(entity);
+                        break;
+                    }
+                }
+                if cache_config_entity_option.is_none() {
+                    return (Action::Forward,false);
+                }
+                let redis_get_start_time = Local::now();
+                let cached_value_result: Result<String, RedisError> = self._redis_conn.get(redis_key.clone());
+
+                redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+
+                if let Ok(redis_v) = cached_value_result {
+                    from_cache = true;
+
+                    trace!("redis_v:{:?}", redis_v);
+
+                    sys_metrics::record_exec_log(ExecLog {
+                        sql_str,
+                        total_duration: (Local::now() - fn_start_time).num_milliseconds(),
+                        mysql_duration,
+                        redis_duration,
+                        from_cache,
+                    });
+                    let response_bytes = vec![];
+                    return (Action::Respond(response_bytes),false);
+                }
+                return (Action::Forward,true);
             }
-            _ => Action::Forward,
+            _ => (Action::Forward,false),
         }
     }
 
     fn handle_response(&mut self, packet: &Packet, sql: Option<&String>) -> Action {
         // forward all responses to the client
-        println!("sql:{:?}",sql);
+        println!("sql:{:?}", sql);
         print_packet_chars(&*packet.bytes);
         Action::Forward
     }

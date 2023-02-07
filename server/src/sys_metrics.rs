@@ -72,7 +72,7 @@ pub fn get_exec_log_list_copy() -> Option<Vec<ExecLog>> {
     };
 }
 
-pub async fn record_exec_log(exec_log: ExecLog) {
+pub fn record_exec_log(exec_log: ExecLog) {
     let locked_result = EXEC_LOG_LIST_MUTEX.lock();
     match locked_result {
         Ok(mut exec_log_list) => {

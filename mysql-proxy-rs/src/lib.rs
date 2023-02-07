@@ -61,7 +61,7 @@ pub enum Action {
 
 /// Packet handlers need to implement this trait
 pub trait PacketHandler {
-    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_package_writer: &mut PacketWriter) -> Action;
+    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_package_writer: &mut PacketWriter) -> (Action,bool);
     fn handle_response(&mut self, p: &Packet,sql:Option<&String>) -> Action;
     fn get_cached_sqls(&mut self) -> Rc<RefCell<Vec<String>>>;
 }
@@ -314,9 +314,11 @@ impl<H> Future for Pipe<H>
                     (*sqls).borrow_mut().push(sql.clone());
                     // info!("push sql:{:?}",sql);
                 };
-                match self
+                let handle_request_result = self
                     .handler
-                    .handle_request(&request, &self.client_reader, &self.client_writer,&mut self.client_packet_writer)
+                    .handle_request(&request, &self.client_reader, &self.client_writer,&mut self.client_packet_writer);
+                let should_update_cache = handle_request_result.1;
+                match handle_request_result.0
                 {
                     Action::Drop => {}
                     Action::Forward => self.server_writer.push(&request),
