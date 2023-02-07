@@ -46,6 +46,7 @@ pub enum Action {
 pub trait PacketHandler {
     fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_package_writer: &mut PacketWriter) -> Action;
     fn handle_response(&mut self, p: &Packet) -> Action;
+    fn handle_response_finish(&mut self, packets: Vec<Packet>);
     fn get_context(&mut self) -> Rc<RefCell<ConnectionContext>>;
 }
 
@@ -62,6 +63,12 @@ pub struct Packet {
 }
 
 impl Packet {
+    pub fn new(bytes:Vec<u8>) -> Self {
+        Packet{
+            bytes,
+        }
+    }
+
     /// Create an error packet
     pub fn error_packet(code: u16, state: [u8; 5], msg: String) -> Self {
         // start building payload
@@ -325,8 +332,10 @@ impl<H> Future for Pipe<H>
             // try reading from server
             let server_read = self.server_reader.read();
             // process buffered responses
+            let mut packets = vec![];
             while let Some(response) = self.server_reader.next() {
-                info!("ctx:{:?}",ctx);
+                // info!("ctx:{:?}",ctx);
+                packets.push(Packet::new(response.bytes.clone()));
                 match self.handler.handle_response(&response) {
                     Action::Drop => {}
                     Action::Forward => self.client_writer.push(&response),
@@ -342,6 +351,7 @@ impl<H> Future for Pipe<H>
                     }
                 };
             }
+            self.handler.handle_response_finish(packets);
 
             // perform all of the writes at the end, since the request handlers may have
             // queued packets in either, or both directions

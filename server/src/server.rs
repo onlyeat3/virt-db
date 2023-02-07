@@ -128,7 +128,6 @@ impl PacketHandler for VirtDBMySQLHandler {
                 // convert the slice to a String object
                 let sql = String::from_utf8(slice.to_vec()).expect("Invalid UTF-8");
 
-                let sql_str = utils::normally(&self.dialect, sql.as_str());
                 let mut mysql_duration = 0;
                 let mut redis_duration = 0;
                 let mut from_cache = false;
@@ -162,13 +161,13 @@ impl PacketHandler for VirtDBMySQLHandler {
                     from_cache = true;
                     trace!("redis_v:{:?}", redis_v);
 
-                    sys_metrics::record_exec_log(ExecLog {
-                        sql_str,
-                        total_duration: (Local::now() - fn_start_time).num_milliseconds(),
-                        mysql_duration,
-                        redis_duration,
-                        from_cache,
-                    });
+                    // sys_metrics::record_exec_log(ExecLog {
+                    //     sql,
+                    //     total_duration: (Local::now() - fn_start_time).num_milliseconds(),
+                    //     mysql_duration,
+                    //     redis_duration,
+                    //     from_cache,
+                    // });
                     let response_bytes = vec![];
                     return Action::Respond(response_bytes);
                 }
@@ -179,21 +178,32 @@ impl PacketHandler for VirtDBMySQLHandler {
         }
     }
 
-    fn handle_response(&mut self, packet: &Packet) -> Action {
-        let sql_option = (&*self.context).borrow_mut().sql.clone();
+    fn handle_response(&mut self, _packet: &Packet) -> Action {
+        Action::Forward
+    }
+
+    fn handle_response_finish(&mut self, packets: Vec<Packet>) {
+        let ctx =  (&*self.context).borrow_mut();
+        let should_update_cache = ctx.should_update_cache;
+        let sql_option =ctx.sql.clone();
         if sql_option.is_none() {
-            return Action::Forward;
+            return;
+        }
+        if !should_update_cache {
+            return;
         }
         let sql = sql_option.clone().unwrap();
-        println!("sql:{:?}", sql);
+        // println!("sql:{:?}", sql);
 
         let redis_key = format!("cache:{:?}", sql);
-        print_packet_chars(&*packet.bytes);
-        let bytes = &*packet.bytes.to_vec();
+        // print_packet_chars(&*packet.bytes);
         let mut chars = vec![];
-        for i in 0..bytes.len() {
-            chars.push(bytes[i] as char);
-        };
+        for packet in packets {
+            let bytes = &*packet.bytes.to_vec();
+            for i in 0..bytes.len() {
+                chars.push(bytes[i] as char);
+            };
+        }
         let redis_v:String = chars.iter()
             .collect();
         let rv: RedisResult<Vec<u8>> = self
@@ -204,10 +214,13 @@ impl PacketHandler for VirtDBMySQLHandler {
                 60 as usize,
             );
         if let Err(err) = rv {
-            warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err)
+            match err.code() {
+                None => {}
+                Some(err_code) => {
+                    warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err_code)
+                }
+            }
         }
-        println!();
-        Action::Forward
     }
 
     fn get_context(&mut self) -> Rc<RefCell<ConnectionContext>> {
