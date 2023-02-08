@@ -5,7 +5,7 @@ use std::borrow::BorrowMut;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::io::Error;
-use std::net::SocketAddr;
+use std::net::{AddrParseError, SocketAddr};
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -57,7 +57,7 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
 
     // for each incoming connection
     let done = local_server_socket.incoming().for_each(move |(client_input_stream, _)| {
-        rt.block_on(async {
+        return rt.block_on(async {
             let sys_config = sys_config.clone();
             //TODO pool mysql+redis ?
             let sys_config = sys_config.clone();
@@ -66,10 +66,21 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
             let mysql_ip = mysql_config.ip;
             let mysql_port = mysql_config.port;
 
-            let redis_conn = redis_client.get_connection().unwrap();
+            let redis_conn_result = redis_client.get_connection();
+            if let Err(err) = redis_conn_result {
+                warn!("Connect Backend Redis fail.err:{:?}",err);
+                return Ok(());
+            }
+            let redis_conn  = redis_conn_result.unwrap();
 
             let mysql_addr = format!("{}:{}", mysql_ip, mysql_port);
-            let mysql_addr = SocketAddr::from_str(mysql_addr.as_str()).unwrap();
+            let mysql_addr_result = SocketAddr::from_str(mysql_addr.as_str());
+            if let Err(err) = mysql_addr_result{
+                warn!("Connect Backend MySQL fail.err:{:?}",err);
+                return Ok(());
+            }
+            let mysql_addr = mysql_addr_result.unwrap();
+
             let future = TcpStream::connect(&mysql_addr, &handle)
                 .and_then(move |mysql| Ok((client_input_stream, mysql)))
                 .and_then(move |(client, server)| {
@@ -81,10 +92,8 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
                 info!("Failed to spawn future: {:?}", err);
             }));
 
-            // everything is great!
-            // Ok(())
+            Ok(())
         });
-        Ok(())
     });
     match l.run(done) {
         Ok(v) => {}

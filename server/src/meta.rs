@@ -52,29 +52,34 @@ pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
             meta_mysql_database
         )
         .clone();
-        let mut conn = Conn::from_url(mysql_url).await.unwrap();
-
         loop {
-            let cache_config_list =
-                "select id,sql_template,duration from cache_config where enabled = true"
-                    .with(())
-                    .map(&mut conn, |(id, sql_template, duration)| {
-                        CacheConfigEntity {
-                            id,
-                            sql_template,
-                            duration,
-                            cache_name: "".to_string(),
-                            remark: "".to_string(),
-                            enabled: -1,
-                            created_by: -1,
-                            updated_by: -1,
-                        }
-                    })
-                    .await
-                    .unwrap();
-            set_cache_config_entity_list(cache_config_list);
-            debug!("reload cache_config_list finish");
-
+            let conn_result = Conn::from_url(mysql_url.clone()).await;
+            match conn_result {
+                Ok(mut conn) => {
+                    let cache_config_list =
+                        "select id,sql_template,duration from cache_config where enabled = true"
+                            .with(())
+                            .map(&mut conn, |(id, sql_template, duration)| {
+                                CacheConfigEntity {
+                                    id,
+                                    sql_template,
+                                    duration,
+                                    cache_name: "".to_string(),
+                                    remark: "".to_string(),
+                                    enabled: -1,
+                                    created_by: -1,
+                                    updated_by: -1,
+                                }
+                            })
+                            .await
+                            .unwrap();
+                    set_cache_config_entity_list(cache_config_list);
+                    debug!("reload cache_config_list finish");
+                }
+                Err(err) => {
+                    warn!("Connect Meta DB fail.err:{:?}",err);
+                }
+            }
             time::sleep(Duration::from_secs(meta_config.refresh_duration_in_seconds)).await;
         }
     });
