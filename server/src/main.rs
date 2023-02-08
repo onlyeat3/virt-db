@@ -22,14 +22,13 @@ use crate::sys_metrics::enable_node_live_refresh_job;
 
 mod meta;
 mod sys_metrics;
-mod mysql_protocol;
-mod serde;
 mod server;
 mod sys_config;
 mod sys_log;
 mod utils;
 mod math;
 mod protocol;
+mod sys_error;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
