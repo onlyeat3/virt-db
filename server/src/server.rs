@@ -2,7 +2,7 @@
 
 use std::{env, iter};
 use std::borrow::BorrowMut;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::rc::Rc;
@@ -104,7 +104,7 @@ pub fn run(client: TcpStream, server: TcpStream, mysql_conn: Conn, redis_conn: C
         _redis_conn: redis_conn,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
-        context: Rc::new(RefCell::new(ConnectionContext { sql: None, should_update_cache: false })),
+        context: Rc::new(RefCell::new(ConnectionContext { sql: None, should_update_cache: false, fn_start_time: Local::now(), mysql_exec_start_time: Default::default(), redis_duration: 0, from_cache: false })),
     })
 }
 
@@ -119,21 +119,20 @@ pub struct VirtDBMySQLHandler {
 }
 
 impl PacketHandler for VirtDBMySQLHandler {
-    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_packet_writer: &mut PacketWriter) -> Action {
+    fn handle_request(&mut self, p: &Packet, ctx: &mut RefMut<ConnectionContext>) -> Action {
         // print_packet_chars(&p.bytes);
-        match p.packet_type() {
+        let result_action = match p.packet_type() {
             Ok(PacketType::ComQuery) => {
                 // ComQuery packets just contain a SQL string as the payload
                 let slice = &p.bytes[5..];
                 // convert the slice to a String object
                 let sql = String::from_utf8(slice.to_vec()).expect("Invalid UTF-8");
 
-                let mut mysql_duration = 0;
                 let mut redis_duration = 0;
                 let mut from_cache = false;
-                let fn_start_time = Local::now();
 
                 debug!("sql:{}", sql);
+
                 let redis_key = format!("cache:{:?}", sql);
                 let cache_config_entity_list = meta::get_cache_config_entity_list();
 
@@ -152,75 +151,88 @@ impl PacketHandler for VirtDBMySQLHandler {
                 if cache_config_entity_option.is_none() {
                     return Action::Forward;
                 }
+
                 let redis_get_start_time = Local::now();
                 let cached_value_result: Result<String, RedisError> = self._redis_conn.get(redis_key.clone());
 
                 redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
 
                 if let Ok(redis_v) = cached_value_result {
-                    from_cache = true;
-                    trace!("redis_v:{:?}", redis_v);
-
-                    // sys_metrics::record_exec_log(ExecLog {
-                    //     sql,
-                    //     total_duration: (Local::now() - fn_start_time).num_milliseconds(),
-                    //     mysql_duration,
-                    //     redis_duration,
-                    //     from_cache,
-                    // });
-                    let response_bytes = vec![];
-                    return Action::Respond(response_bytes);
+                    if redis_v != ""{
+                        from_cache = true;
+                        trace!("redis_v:{:?}", redis_v);
+                        ctx.redis_duration = redis_duration;
+                        ctx.from_cache = from_cache;
+                        // let mut response_bytes = vec![];
+                        let chars = redis_v.chars().into_iter();
+                        let mut ps = vec![];
+                        for x in chars.into_iter() {
+                            ps.push(Packet::new(vec![x as u8]));
+                            // response_bytes.push(x as u8);
+                        }
+                        return Action::Respond(ps);
+                    }
                 }
-                (&*self.context).borrow_mut().sql = Some(sql.clone());
+
+                ctx.should_update_cache = true;
                 return Action::Forward;
             }
             _ => Action::Forward,
-        }
+        };
+        let mysql_exec_start_time = Local::now();
+        ctx.mysql_exec_start_time = mysql_exec_start_time;
+        result_action
     }
-
-    fn handle_response(&mut self, _packet: &Packet) -> Action {
+    fn handle_response(&mut self, p: &Packet, ctx: &mut RefMut<ConnectionContext>) -> Action {
         Action::Forward
     }
 
-    fn handle_response_finish(&mut self, packets: Vec<Packet>) {
-        let ctx =  (&*self.context).borrow_mut();
+    fn handle_response_finish(&mut self, packets: Vec<Packet>, ctx: &mut RefMut<ConnectionContext>) {
         let should_update_cache = ctx.should_update_cache;
         let sql_option =ctx.sql.clone();
         if sql_option.is_none() {
             return;
         }
-        if !should_update_cache {
-            return;
-        }
-        let sql = sql_option.clone().unwrap();
-        // println!("sql:{:?}", sql);
+        let mysql_duration = (Local::now() - ctx.mysql_exec_start_time).num_milliseconds();
+        if should_update_cache {
+            let sql = sql_option.clone().unwrap();
+            // println!("sql:{:?}", sql);
 
-        let redis_key = format!("cache:{:?}", sql);
-        // print_packet_chars(&*packet.bytes);
-        let mut chars = vec![];
-        for packet in packets {
-            let bytes = &*packet.bytes.to_vec();
-            for i in 0..bytes.len() {
-                chars.push(bytes[i] as char);
-            };
-        }
-        let redis_v:String = chars.iter()
-            .collect();
-        let rv: RedisResult<Vec<u8>> = self
-            ._redis_conn
-            .set_ex(
-                redis_key.clone(),
-                redis_v,
-                60 as usize,
-            );
-        if let Err(err) = rv {
-            match err.code() {
-                None => {}
-                Some(err_code) => {
-                    warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err_code)
+            let redis_key = format!("cache:{:?}", sql);
+            // print_packet_chars(&*packet.bytes);
+            let mut chars = vec![];
+            for packet in packets {
+                let bytes = &*packet.bytes.to_vec();
+                for i in 0..bytes.len() {
+                    chars.push(bytes[i] as char);
+                };
+            }
+            let redis_v:String = chars.iter()
+                .collect();
+            let rv: RedisResult<Vec<u8>> = self
+                ._redis_conn
+                .set_ex(
+                    redis_key.clone(),
+                    redis_v,
+                    60 as usize,
+                );
+            if let Err(err) = rv {
+                match err.code() {
+                    None => {}
+                    Some(err_code) => {
+                        warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err_code)
+                    }
                 }
             }
         }
+        let total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
+        sys_metrics::record_exec_log(ExecLog{
+            sql_str: sql_option.unwrap(),
+            total_duration,
+            mysql_duration,
+            redis_duration: ctx.redis_duration,
+            from_cache: ctx.from_cache,
+        });
     }
 
     fn get_context(&mut self) -> Rc<RefCell<ConnectionContext>> {

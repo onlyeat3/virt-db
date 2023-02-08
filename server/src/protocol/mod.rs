@@ -1,13 +1,14 @@
 //! An extensible MySQL Proxy Server based on tokio-core
 
 use std::borrow::BorrowMut;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind, Read, Write};
 use std::net::Shutdown;
 use std::rc::Rc;
 
 use byteorder::*;
+use chrono::{DateTime, Local};
 use futures::{Async, Future, Poll};
 use tokio_core::net::TcpStream;
 
@@ -16,6 +17,7 @@ use packet_writer::PacketWriter;
 // use tokio_rustls::rustls::ServerConfig;
 
 pub use crate::myc::constants::{CapabilityFlags, ColumnFlags, ColumnType, StatusFlags};
+use crate::sys_metrics::ExecLog;
 // #[cfg(feature = "tls")]
 // pub use crate::tls::{plain_run_with_options, secure_run_with_options};
 
@@ -44,9 +46,9 @@ pub enum Action {
 
 /// Packet handlers need to implement this trait
 pub trait PacketHandler {
-    fn handle_request(&mut self, p: &Packet, client_reader: &ConnReader, client_writer: &ConnWriter, client_package_writer: &mut PacketWriter) -> Action;
-    fn handle_response(&mut self, p: &Packet) -> Action;
-    fn handle_response_finish(&mut self, packets: Vec<Packet>);
+    fn handle_request(&mut self, p: &Packet,ctx:&mut RefMut<ConnectionContext>) -> Action;
+    fn handle_response(&mut self, p: &Packet,ctx:&mut RefMut<ConnectionContext>) -> Action;
+    fn handle_response_finish(&mut self, packets: Vec<Packet>,ctx:&mut RefMut<ConnectionContext>);
     fn get_context(&mut self) -> Rc<RefCell<ConnectionContext>>;
 }
 
@@ -54,6 +56,10 @@ pub trait PacketHandler {
 pub struct ConnectionContext{
     pub sql:Option<String>,
     pub should_update_cache:bool,
+    pub fn_start_time: DateTime<Local>,
+    pub mysql_exec_start_time: DateTime<Local>,
+    pub redis_duration:i64,
+    pub from_cache:bool,
 }
 
 /// A packet is just a wrapper for a Vec<u8>
@@ -299,6 +305,7 @@ impl<H> Future for Pipe<H>
 
     fn poll(&mut self) -> Poll<(), Error> {
         let mut ctx = self.handler.get_context();
+        let mut ctx = (&*ctx).borrow_mut();
         loop {
             let client_read = self.client_reader.read();
 
@@ -307,7 +314,7 @@ impl<H> Future for Pipe<H>
                 let slice = &request.bytes[5..];
                 let handle_request_result = self
                     .handler
-                    .handle_request(&request, &self.client_reader, &self.client_writer,&mut self.client_packet_writer);
+                    .handle_request(&request, &mut ctx);
                 match handle_request_result{
                     Action::Drop => {}
                     Action::Forward => self.server_writer.push(&request),
@@ -324,7 +331,7 @@ impl<H> Future for Pipe<H>
                 };
 
                 if let Ok(sql) = String::from_utf8(slice.to_vec()){
-                    (&*ctx).borrow_mut().sql = Some(sql.clone());
+                    ctx.sql = Some(sql.clone());
                     // info!("push sql:{:?}",sql);
                 };
             }
@@ -336,7 +343,7 @@ impl<H> Future for Pipe<H>
             while let Some(response) = self.server_reader.next() {
                 // info!("ctx:{:?}",ctx);
                 packets.push(Packet::new(response.bytes.clone()));
-                match self.handler.handle_response(&response) {
+                match self.handler.handle_response(&response, &mut ctx) {
                     Action::Drop => {}
                     Action::Forward => self.client_writer.push(&response),
                     Action::Mutate(ref p2) => self.client_writer.push(p2),
@@ -351,7 +358,7 @@ impl<H> Future for Pipe<H>
                     }
                 };
             }
-            self.handler.handle_response_finish(packets);
+            self.handler.handle_response_finish(packets, &mut ctx);
 
             // perform all of the writes at the end, since the request handlers may have
             // queued packets in either, or both directions
