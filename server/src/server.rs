@@ -86,7 +86,12 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
         });
         Ok(())
     });
-    l.run(done).unwrap();
+    match l.run(done) {
+        Ok(v) => {}
+        Err(err) => {
+            warn!("error:{:?}",err);
+        }
+    };
     Ok(())
 }
 
