@@ -52,7 +52,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sys_config = sys_config_wrapper.unwrap();
     let virt_db_config = sys_config.clone();
 
-    let rt = Builder::new_current_thread()
+    let rt = Builder::new_multi_thread()
+        .worker_threads(4)
         .enable_all()
         .build()
         .unwrap();
