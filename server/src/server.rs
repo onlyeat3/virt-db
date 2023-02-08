@@ -4,6 +4,7 @@ use std::{env, iter};
 use std::borrow::BorrowMut;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
+use std::io::Error;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -25,11 +26,9 @@ use crate::meta::CacheConfigEntity;
 use crate::protocol::{Action, ConnectionContext, ConnReader, ConnWriter, Packet, PacketHandler, PacketType, Pipe};
 use crate::protocol::packet_writer::PacketWriter;
 
-// use crate::mysql_protocol::MySQL;
 use crate::sys_config::{ServerConfig, VirtDBConfig};
 use crate::sys_metrics::ExecLog;
 
-// use opensrv_mysql::*;
 
 pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>> {
     let server_addr = format!("0.0.0.0:{:?}", sys_config.clone().server.port);
@@ -40,7 +39,7 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
     // Get a reference to the reactor event loop
     let handle = l.handle();
     // Create a TCP listener which will listen for incoming connections
-    let socket = TcpListener::bind(&server_addr, &l.handle()).unwrap();
+    let local_server_socket = TcpListener::bind(&server_addr, &l.handle()).unwrap();
     info!("Listening on: {}", server_addr);
     let rt = Builder::new_multi_thread()
         .enable_all()
@@ -57,7 +56,7 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
     let redis_client = redis::Client::open(redis_url.to_string()).unwrap();
 
     // for each incoming connection
-    let done = socket.incoming().for_each(move |(socket, _)| {
+    let done = local_server_socket.incoming().for_each(move |(client_input_stream, _)| {
         rt.block_on(async {
             let sys_config = sys_config.clone();
             //TODO pool mysql+redis ?
@@ -66,22 +65,15 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
             let mysql_config = sys_config.clone().mysql;
             let mysql_ip = mysql_config.ip;
             let mysql_port = mysql_config.port;
-            let mysql_username = mysql_config.username;
-            let mysql_password = mysql_config.password;
-            let mysql_url = format!(
-                "mysql://{}:{}@{}:{}",
-                mysql_username, mysql_password, mysql_ip, mysql_port
-            );
-            let mysql_conn = Conn::from_url(mysql_url.to_string()).await.unwrap();
 
             let redis_conn = redis_client.get_connection().unwrap();
 
             let mysql_addr = format!("{}:{}", mysql_ip, mysql_port);
             let mysql_addr = SocketAddr::from_str(mysql_addr.as_str()).unwrap();
             let future = TcpStream::connect(&mysql_addr, &handle)
-                .and_then(move |mysql| Ok((socket, mysql)))
+                .and_then(move |mysql| Ok((client_input_stream, mysql)))
                 .and_then(move |(client, server)| {
-                    run(client, server, mysql_conn, redis_conn, sys_config.clone())
+                    run(client, server, redis_conn, sys_config.clone())
                 });
 
             // tell the tokio reactor to run the future
@@ -98,9 +90,8 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-pub fn run(client: TcpStream, server: TcpStream, mysql_conn: Conn, redis_conn: Connection, sys_config: VirtDBConfig) -> Pipe<VirtDBMySQLHandler> {
+pub fn run(client: TcpStream, server: TcpStream, redis_conn: Connection, sys_config: VirtDBConfig) -> Pipe<VirtDBMySQLHandler> {
     Pipe::new(Rc::new(client), Rc::new(server), VirtDBMySQLHandler {
-        _mysql_connection: mysql_conn,
         _redis_conn: redis_conn,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
@@ -110,7 +101,6 @@ pub fn run(client: TcpStream, server: TcpStream, mysql_conn: Conn, redis_conn: C
 
 
 pub struct VirtDBMySQLHandler {
-    _mysql_connection: Conn,
     _redis_conn: Connection,
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     dialect: MySqlDialect,
@@ -158,7 +148,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                 redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
 
                 if let Ok(redis_v) = cached_value_result {
-                    if redis_v != ""{
+                    if redis_v != "" {
                         from_cache = true;
                         trace!("redis_v:{:?}", redis_v);
                         ctx.redis_duration = redis_duration;
@@ -189,7 +179,7 @@ impl PacketHandler for VirtDBMySQLHandler {
 
     fn handle_response_finish(&mut self, packets: Vec<Packet>, ctx: &mut RefMut<ConnectionContext>) {
         let should_update_cache = ctx.should_update_cache;
-        let sql_option =ctx.sql.clone();
+        let sql_option = ctx.sql.clone();
         if sql_option.is_none() {
             return;
         }
@@ -207,7 +197,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                     chars.push(bytes[i] as char);
                 };
             }
-            let redis_v:String = chars.iter()
+            let redis_v: String = chars.iter()
                 .collect();
             let rv: RedisResult<Vec<u8>> = self
                 ._redis_conn
@@ -226,7 +216,7 @@ impl PacketHandler for VirtDBMySQLHandler {
             }
         }
         let total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
-        sys_metrics::record_exec_log(ExecLog{
+        sys_metrics::record_exec_log(ExecLog {
             sql_str: sql_option.unwrap(),
             total_duration,
             mysql_duration,

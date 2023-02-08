@@ -41,8 +41,6 @@ pub struct AdminConfig {
 pub struct BackendMySQLServerConfig {
     pub ip: String,
     pub port: i32,
-    pub username: String,
-    pub password: String,
 }
 /**
  * 指标监控配置

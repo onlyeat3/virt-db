@@ -307,7 +307,7 @@ impl<H> Future for Pipe<H>
         let mut ctx = self.handler.get_context();
         let mut ctx = (&*ctx).borrow_mut();
         loop {
-            let client_read = self.client_reader.read();
+            let mut client_read = self.client_reader.read();
 
             // process buffered requests
             while let Some(request) = self.client_reader.next() {
