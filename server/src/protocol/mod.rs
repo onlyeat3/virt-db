@@ -60,6 +60,7 @@ pub struct ConnectionContext{
     pub mysql_exec_start_time: DateTime<Local>,
     pub redis_duration:i64,
     pub from_cache:bool,
+    pub cache_duration:i32,
 }
 
 /// A packet is just a wrapper for a Vec<u8>

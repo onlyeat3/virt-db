@@ -109,7 +109,7 @@ pub fn run(client: TcpStream, server: TcpStream, redis_conn: Connection, sys_con
         _redis_conn: redis_conn,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
-        context: Rc::new(RefCell::new(ConnectionContext { sql: None, should_update_cache: false, fn_start_time: Local::now(), mysql_exec_start_time: Default::default(), redis_duration: 0, from_cache: false })),
+        context: Rc::new(RefCell::new(ConnectionContext { sql: None, should_update_cache: false, fn_start_time: Local::now(), mysql_exec_start_time: Default::default(), redis_duration: 0, from_cache: false, cache_duration: 0 })),
     })
 }
 
@@ -178,7 +178,13 @@ impl PacketHandler for VirtDBMySQLHandler {
                     }
                 }
                 // info!("sql:{:?},should_update_cache:{:?}",sql,true);
-                ctx.should_update_cache = true;
+                match cache_config_entity_option{
+                    None => {}
+                    Some(cache_config_entity) => {
+                        ctx.should_update_cache = true;
+                        ctx.cache_duration = cache_config_entity.duration;
+                    }
+                };
                 return Action::Forward;
             }
             _ => Action::Forward,
@@ -220,7 +226,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                 .set_ex(
                     redis_key.clone(),
                     redis_v,
-                    60 as usize,
+                    ctx.cache_duration as usize,
                 );
             if let Err(err) = rv {
                 match err.code() {
@@ -246,6 +252,7 @@ impl PacketHandler for VirtDBMySQLHandler {
             mysql_exec_start_time: Default::default(),
             redis_duration: 0,
             from_cache: false,
+            cache_duration: 0,
         }));
     }
 
