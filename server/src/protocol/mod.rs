@@ -340,6 +340,7 @@ impl<H> Future for Pipe<H>
             let server_read = self.server_reader.read();
             // process buffered responses
             let mut packets = vec![];
+            let mut write_finish = false;
             while let Some(response) = self.server_reader.next() {
                 // info!("ctx:{:?}",ctx);
                 packets.push(Packet::new(response.bytes.clone()));
@@ -357,8 +358,20 @@ impl<H> Future for Pipe<H>
                         self.client_writer.push(&error_packet);
                     }
                 };
+                write_finish = true;
             }
-            self.handler.handle_response_finish(packets, &mut ctx);
+            if write_finish {
+                // let mut chars = vec![];
+                // for x in packets {
+                //     for v in x.bytes {
+                //         chars.push(v as char);
+                //     }
+                // }
+                // let s:String = chars.iter()
+                //     .collect();
+                // info!("sql:{:?},packets:{:?}",ctx.sql,s);
+                self.handler.handle_response_finish(packets, &mut ctx);
+            }
 
             // perform all of the writes at the end, since the request handlers may have
             // queued packets in either, or both directions

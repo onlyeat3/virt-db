@@ -177,7 +177,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                         return Action::Respond(ps);
                     }
                 }
-
+                // info!("sql:{:?},should_update_cache:{:?}",sql,true);
                 ctx.should_update_cache = true;
                 return Action::Forward;
             }
@@ -197,6 +197,8 @@ impl PacketHandler for VirtDBMySQLHandler {
         if sql_option.is_none() {
             return;
         }
+        let sql = sql_option.clone().unwrap();
+        // info!("sql:{:?},should_update_cache:{:?}",sql,should_update_cache);
         let mysql_duration = (Local::now() - ctx.mysql_exec_start_time).num_milliseconds();
         if should_update_cache {
             let sql = sql_option.clone().unwrap();
@@ -237,6 +239,14 @@ impl PacketHandler for VirtDBMySQLHandler {
             redis_duration: ctx.redis_duration,
             from_cache: ctx.from_cache,
         });
+        self.context = Rc::new(RefCell::new(ConnectionContext{
+            sql: None,
+            should_update_cache:false,
+            fn_start_time: Default::default(),
+            mysql_exec_start_time: Default::default(),
+            redis_duration: 0,
+            from_cache: false,
+        }));
     }
 
     fn get_context(&mut self) -> Rc<RefCell<ConnectionContext>> {
