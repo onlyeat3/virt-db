@@ -22,10 +22,6 @@ pub struct ServerConfig {
     pub dev: bool,
     //服务端口
     pub port: i32,
-    //客户端连接账号
-    pub username: String,
-    //客户端链接密码
-    pub password: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
