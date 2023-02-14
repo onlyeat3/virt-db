@@ -1,6 +1,8 @@
 #![allow(unused_imports, unused_variables)]
 
 use std::collections::HashMap;
+use std::env;
+use std::path::Path;
 
 use sqlparser::dialect::{Dialect, MySqlDialect};
 use sqlparser::parser::Parser;
@@ -112,7 +114,6 @@ pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bo
     }
     return true;
 }
-
 
 #[test]
 fn test_match() {

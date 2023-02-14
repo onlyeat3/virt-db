@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::env::Args;
+use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::ops::Deref;
 use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
 use std::time::Duration;
 
-use chrono::Local;
+use chrono::{DateTime, Local};
 use itertools::Itertools;
 use log::{debug, info};
 use metrics_exporter_prometheus::PrometheusBuilder;
@@ -13,22 +14,18 @@ use metrics_util::MetricKindMask;
 use once_cell::sync::Lazy;
 use reqwest::{Body, Client, ClientBuilder, Error, Response};
 use serde::{Deserialize, Serialize};
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::time;
 use tokio::time::{Instant, Interval};
 
 use crate::math::avg::AveragedCollection;
-use crate::sys_config;
+use crate::{math, sys_config, utils};
 use crate::sys_config::VirtDBConfig;
+use crate::utils::sys_path;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataWrapper<V> {
-    pub code: i32,
-    pub message: String,
-    pub success: bool,
-    pub data: Option<V>,
-}
 
-#[derive(Serialize, Deserialize, Clone, Debug, Eq,PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ExecLog {
     pub sql_str: String,
     pub total_duration: i64,
@@ -92,10 +89,10 @@ pub async fn remove_exec_logs(expired_exec_log_list: &Vec<ExecLog>) {
             exec_log_list.retain(|ele| {
                 for expired_exec_log in expired_exec_log_list {
                     if ele == expired_exec_log {
-                        return true;
+                        return false;
                     }
                 }
-                return false;
+                return true;
             });
         }
         Err(err) => {
@@ -105,14 +102,46 @@ pub async fn remove_exec_logs(expired_exec_log_list: &Vec<ExecLog>) {
 }
 
 
-pub async fn enable_node_live_refresh_job(sys_config: VirtDBConfig) {
+pub async fn enable_metric_writing_job(sys_config: VirtDBConfig) {
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(1));
-        interval.tick().await;
-        info!("node_live_refresh_job started.");
+        info!("metric data writing task started.");
+
+        let mut origin_now_str = utils::sys_datetime::now_str_data_file_name();
+        let target_file = sys_path::resolve_as_current_path(format!("{}.json", origin_now_str)).unwrap();
+        let target_file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(target_file)
+            .await
+            .unwrap();
+        let mut writer = BufWriter::new(target_file);
+
         loop {
-            interval.tick().await;
-            //样板结束
+            time::sleep(Duration::from_secs(1)).await;
+
+            let now_str = utils::sys_datetime::now_str_data_file_name();
+            if now_str != origin_now_str {
+                let target_file = sys_path::resolve_as_current_path(format!("{}.json", origin_now_str));
+                if target_file.is_none() {
+                    error!("Can not get current exe path");
+                    continue;
+                }
+                let target_file = target_file.unwrap();
+                let target_file = OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .create(true)
+                    .open(target_file)
+                    .await;
+                if target_file.is_err() {
+                    let err = target_file.err().unwrap();
+                    error!("Can not get current exe path.err:{:?}",err);
+                    continue;
+                }
+                let target_file = target_file.unwrap();
+                writer = BufWriter::new(target_file);
+            }
 
             let exec_log_list_result = get_exec_log_list_copy();
             if let None = exec_log_list_result {
@@ -135,7 +164,7 @@ pub async fn enable_node_live_refresh_job(sys_config: VirtDBConfig) {
                         .collect::<Vec<ExecLog>>();
 
                     for exec_log in list {
-                        avg_calculator.add(exec_log.total_duration as i32);
+                        avg_calculator.add(exec_log.total_duration);
                         if max_duration < exec_log.total_duration {
                             max_duration = exec_log.total_duration;
                         }
@@ -163,78 +192,37 @@ pub async fn enable_node_live_refresh_job(sys_config: VirtDBConfig) {
                     metric_history
                 })
                 .collect::<Vec<MetricHistory>>();
-            let result = register(&sys_config, metric_history_list).await;
-            let _ = match result {
-                Ok(response) => {
-                    if response.status().as_u16() != 200 {
-                        warn!("register vt_node fail. response:{:?}",response);
-                        return;
+            let mut lines = vec![];
+            for metric_history in metric_history_list {
+                match serde_json::to_string(&metric_history) {
+                    Ok(json_v) => {
+                        lines.push(json_v);
                     }
-                    let data_wrapper_result = response.json::<DataWrapper<String>>()
-                        .await;
-                    match data_wrapper_result {
-                        Ok(data_wrapper) => {
-                            if !data_wrapper.success {
-                                warn!("register vt_node fail. response:{:?}",data_wrapper);
-                            }
-                            //success
-                            remove_exec_logs(&exec_log_list).await;
-                        }
-                        Err(e) => {
-                            warn!("register vt_node fail:{:?}",e);
-                        }
-                    };
+                    Err(e) => {
+                        warn!("Convert Vec<MetricHistory> to json fail:{:?}",e);
+                    }
+                };
+            }
+
+            if lines.len() < 1{
+                continue;
+            }
+
+            let lines_str = lines.join("\n");
+            info!("v:{:?}",lines_str);
+            let lines_str = lines_str.as_bytes();
+            match writer.write_all(lines_str).await {
+                Ok(_) => {
+                    if let Err(e) = writer.flush().await{
+                        error!("flush metric history fail.err:{:?}",e);
+                    }
+                    //success
+                    remove_exec_logs(&exec_log_list).await;
                 }
                 Err(e) => {
-                    warn!("register vt_node fail:{:?}",e);
+                    warn!("write metrics fail:{:?}",e);
                 }
-            };
-            //样板开始
-            time::sleep(Duration::from_secs(10)).await;
-        }
+            }
+        };
     });
-}
-
-pub fn enable_metrics(sys_config: VirtDBConfig) {
-    // tracing_subscriber::fmt::init();
-
-    let builder = PrometheusBuilder::new();
-    let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), sys_config.metric.expose_port);
-    builder
-        .with_http_listener(addr)
-        .idle_timeout(
-            MetricKindMask::COUNTER | MetricKindMask::HISTOGRAM,
-            Some(Duration::from_secs(10)),
-        )
-        .install()
-        .expect("failed to install Prometheus recorder");
-    info!("prometheus exposed at 0.0.0.0:{}",sys_config.metric.expose_port);
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VtNodeRegisterParam {
-    pub port: String,
-    pub metric_history_list: Vec<MetricHistory>,
-}
-
-async fn register(sys_config: &VirtDBConfig, metric_history_list: Vec<MetricHistory>) -> Result<Response, Error> {
-    let address = sys_config.admin.address.clone();
-    let register_api_url = format!("{}/vt_node/register", address);
-    let params = VtNodeRegisterParam {
-        port: sys_config.server.port.to_string(),
-        metric_history_list,
-    };
-
-    let request_body = serde_json::to_string_pretty(&params).unwrap();
-    debug!("[job]request body:{}",request_body);
-    let response = Client::builder()
-        .no_proxy()
-        .build()?
-        .post(register_api_url)
-        .header("Content-Type", "application/json")
-        .body(request_body)
-        .send()
-        .await?;
-    return Ok(response);
 }

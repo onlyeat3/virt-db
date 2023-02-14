@@ -4,7 +4,8 @@ use std::{env, iter};
 use std::borrow::BorrowMut;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
-use std::io::Error;
+use std::fs::File;
+use std::io::{BufWriter, Error, Write};
 use std::net::{AddrParseError, SocketAddr};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -21,13 +22,13 @@ use tokio::runtime::Builder;
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor::Core;
 
-use crate::{meta, sys_metrics, utils};
+use crate::{meta, sys_assistant_client, utils};
 use crate::meta::CacheConfigEntity;
 use crate::protocol::{Action, ConnectionContext, ConnReader, ConnWriter, Packet, PacketHandler, PacketType, Pipe};
 use crate::protocol::packet_writer::PacketWriter;
 
 use crate::sys_config::{ServerConfig, VirtDBConfig};
-use crate::sys_metrics::ExecLog;
+use crate::sys_assistant_client::ExecLog;
 
 
 pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -143,7 +144,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                 let mysql_dialect = MySqlDialect {};
                 let mut cache_config_entity_option: Option<&CacheConfigEntity> = None;
                 for entity in cache_config_entity_list {
-                    if utils::is_pattern_match(
+                    if utils::sys_sql::is_pattern_match(
                         &*entity.sql_template.to_uppercase().trim(),
                         sql.to_uppercase().trim(),
                         &mysql_dialect,
@@ -238,7 +239,7 @@ impl PacketHandler for VirtDBMySQLHandler {
             }
         }
         let total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
-        sys_metrics::record_exec_log(ExecLog {
+        sys_assistant_client::record_exec_log(ExecLog {
             sql_str: sql_option.unwrap(),
             total_duration,
             mysql_duration,

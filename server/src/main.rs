@@ -1,27 +1,28 @@
 #![allow(unused_imports, dead_code)]
-#[macro_use]
-extern crate log;
-extern crate core;
-extern crate tokio;
-extern crate lazy_static;
 extern crate byteorder;
+extern crate core;
 #[macro_use]
 extern crate futures;
+extern crate lazy_static;
+#[macro_use]
+extern crate log;
 extern crate mysql_common as myc;
 extern crate mysql_common;
+extern crate tokio;
 #[macro_use]
 extern crate tokio_core;
 
+use std::error::Error;
+
 use clap::{AppSettings, Parser};
 use log::{error, info};
-use std::error::Error;
 use tokio::runtime::Builder;
 
 use crate::server::start;
-use crate::sys_metrics::enable_node_live_refresh_job;
+use crate::sys_assistant_client::enable_metric_writing_job;
 
 mod meta;
-mod sys_metrics;
+mod sys_assistant_client;
 mod server;
 mod sys_config;
 mod sys_log;
@@ -57,9 +58,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build()
         .unwrap();
     rt.block_on(async move {
-        sys_metrics::enable_metrics(sys_config.clone());
         meta::enable_meta_refresh_job(sys_config.clone()).await;
-        enable_node_live_refresh_job(sys_config.clone()).await;
+        enable_metric_writing_job(sys_config.clone()).await;
     });
 
     start(virt_db_config).unwrap();

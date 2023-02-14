@@ -17,7 +17,7 @@ use packet_writer::PacketWriter;
 // use tokio_rustls::rustls::ServerConfig;
 
 pub use crate::myc::constants::{CapabilityFlags, ColumnFlags, ColumnType, StatusFlags};
-use crate::sys_metrics::ExecLog;
+use crate::sys_assistant_client::ExecLog;
 // #[cfg(feature = "tls")]
 // pub use crate::tls::{plain_run_with_options, secure_run_with_options};
 
@@ -305,10 +305,10 @@ impl<H> Future for Pipe<H>
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
-        let mut ctx = self.handler.get_context();
+        let ctx = self.handler.get_context();
         let mut ctx = (&*ctx).borrow_mut();
         loop {
-            let mut client_read = self.client_reader.read();
+            let client_read = self.client_reader.read();
 
             // process buffered requests
             while let Some(request) = self.client_reader.next() {
