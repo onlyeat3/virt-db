@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "server",
+    "assistant",
     "admin"
 ]
 [profile.release]
