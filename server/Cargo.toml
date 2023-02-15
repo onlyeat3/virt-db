@@ -17,7 +17,7 @@ nom = "7.1.0"
 tokio = { version = "1.17.0", features = ["full"] }
 futures = "0.1"
 tokio-core = "0.1.18"
-mysql_async = "0.30.0"
+mysql = "23.0.1"
 sqlx = { version = "0.6", features = [ "runtime-tokio-rustls" , "mysql" ] }
 
 clap = {version="3.2.14",features = [ "derive" ]}

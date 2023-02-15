@@ -14,8 +14,6 @@ use chrono::Local;
 
 use futures::Future;
 use futures::stream::Stream;
-use mysql_async::Conn;
-use mysql_async::prelude::Query;
 use redis::{Commands, Connection, RedisError, RedisResult};
 use sqlparser::dialect::MySqlDialect;
 use tokio::runtime::Builder;

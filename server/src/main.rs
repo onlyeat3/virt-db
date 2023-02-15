@@ -52,15 +52,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sys_config = sys_config_wrapper.unwrap();
     let virt_db_config = sys_config.clone();
 
-    let rt = Builder::new_multi_thread()
-        .worker_threads(4)
-        .enable_all()
-        .build()
-        .unwrap();
-    rt.block_on(async move {
-        meta::enable_meta_refresh_job(sys_config.clone()).await;
-        enable_metric_writing_job(sys_config.clone()).await;
-    });
+    enable_metric_writing_job(sys_config.clone());
+    meta::enable_meta_refresh_job(sys_config.clone());
 
     start(virt_db_config).unwrap();
     Ok(())

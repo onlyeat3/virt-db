@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 use std::env::Args;
-use std::io;
+use std::{io, thread, time};
+use std::fs::OpenOptions;
+use std::io::{BufWriter, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::ops::Deref;
 use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
+use std::thread::sleep;
 use std::time::Duration;
 
 use chrono::{DateTime, Local};
@@ -14,10 +17,6 @@ use metrics_util::MetricKindMask;
 use once_cell::sync::Lazy;
 use reqwest::{Body, Client, ClientBuilder, Error, Response};
 use serde::{Deserialize, Serialize};
-use tokio::fs::OpenOptions;
-use tokio::io::{AsyncWriteExt, BufWriter};
-use tokio::time;
-use tokio::time::{Instant, Interval};
 
 use crate::math::avg::AveragedCollection;
 use crate::{math, sys_config, utils};
@@ -82,7 +81,7 @@ pub fn record_exec_log(exec_log: ExecLog) {
     };
 }
 
-pub async fn remove_exec_logs(expired_exec_log_list: &Vec<ExecLog>) {
+pub fn remove_exec_logs(expired_exec_log_list: &Vec<ExecLog>) {
     let locked_result = EXEC_LOG_LIST_MUTEX.lock();
     match locked_result {
         Ok(mut exec_log_list) => {
@@ -102,8 +101,8 @@ pub async fn remove_exec_logs(expired_exec_log_list: &Vec<ExecLog>) {
 }
 
 
-pub async fn enable_metric_writing_job(sys_config: VirtDBConfig) {
-    tokio::spawn(async move {
+pub fn enable_metric_writing_job(sys_config: VirtDBConfig) {
+    thread::spawn(move || {
         info!("metric data writing task started.");
 
         let mut origin_now_str = utils::sys_datetime::now_str_data_file_name();
@@ -113,12 +112,11 @@ pub async fn enable_metric_writing_job(sys_config: VirtDBConfig) {
             .append(true)
             .create(true)
             .open(target_file)
-            .await
             .unwrap();
         let mut writer = BufWriter::new(target_file);
 
         loop {
-            time::sleep(Duration::from_secs(1)).await;
+            // sleep(Duration::from_secs(5));
 
             let now_str = utils::sys_datetime::now_str_data_file_name();
             if now_str != origin_now_str {
@@ -132,8 +130,7 @@ pub async fn enable_metric_writing_job(sys_config: VirtDBConfig) {
                     .write(true)
                     .append(true)
                     .create(true)
-                    .open(target_file)
-                    .await;
+                    .open(target_file);
                 if target_file.is_err() {
                     let err = target_file.err().unwrap();
                     error!("Can not get current exe path.err:{:?}",err);
@@ -204,20 +201,20 @@ pub async fn enable_metric_writing_job(sys_config: VirtDBConfig) {
                 };
             }
 
-            if lines.len() < 1{
+            if lines.len() < 1 {
                 continue;
             }
 
             let lines_str = lines.join("\n");
-            info!("v:{:?}",lines_str);
+            // info!("v:{:?}",lines_str);
             let lines_str = lines_str.as_bytes();
-            match writer.write_all(lines_str).await {
+            match writer.write_all(lines_str) {
                 Ok(_) => {
-                    if let Err(e) = writer.flush().await{
+                    if let Err(e) = writer.flush(){
                         error!("flush metric history fail.err:{:?}",e);
                     }
                     //success
-                    remove_exec_logs(&exec_log_list).await;
+                    remove_exec_logs(&exec_log_list);
                 }
                 Err(e) => {
                     warn!("write metrics fail:{:?}",e);

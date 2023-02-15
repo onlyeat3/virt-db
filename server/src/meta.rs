@@ -1,8 +1,7 @@
-use std::time::{Duration};
-
-use mysql_async::{Conn};
-use mysql_async::prelude::{Query, WithParams};
-use tokio::{time};
+use std::{thread, time};
+use std::time::Duration;
+use mysql::{Conn, Opts, Pool};
+use mysql::prelude::*;
 
 use crate::sys_config::VirtDBConfig;
 
@@ -35,9 +34,9 @@ pub struct CacheConfigEntity {
     pub updated_by: i64,
 }
 
-pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
+pub fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
     let meta_config = sys_config.meta_db.clone();
-    tokio::spawn(async move {
+    thread::spawn(move || {
         let meta_mysql_username = meta_config.username;
         let meta_mysql_password = meta_config.password;
         let meta_mysql_ip = meta_config.ip;
@@ -51,9 +50,11 @@ pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
             meta_mysql_port,
             meta_mysql_database
         )
-        .clone();
+            .clone();
+        let pool = Pool::new(&*mysql_url.clone()).unwrap();
         loop {
-            let conn_result = Conn::from_url(mysql_url.clone()).await;
+            let conn_result = pool.get_conn();
+
             match conn_result {
                 Ok(mut conn) => {
                     let cache_config_list =
@@ -71,7 +72,6 @@ pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
                                     updated_by: -1,
                                 }
                             })
-                            .await
                             .unwrap();
                     set_cache_config_entity_list(cache_config_list);
                     debug!("reload cache_config_list finish");
@@ -80,7 +80,7 @@ pub async fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
                     warn!("Connect Meta DB fail.err:{:?}",err);
                 }
             }
-            time::sleep(Duration::from_secs(meta_config.refresh_duration_in_seconds)).await;
+            thread::sleep(Duration::from_secs(meta_config.refresh_duration_in_seconds));
         }
     });
     info!("CacheConfig auto-reload task Running");
