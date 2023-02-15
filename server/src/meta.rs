@@ -2,6 +2,8 @@ use std::{thread, time};
 use std::time::Duration;
 use mysql::{Conn, Opts, Pool};
 use mysql::prelude::*;
+use sqlparser::dialect::MySqlDialect;
+use sqlparser::tokenizer::{Token, Tokenizer};
 
 use crate::sys_config::VirtDBConfig;
 
@@ -32,6 +34,7 @@ pub struct CacheConfigEntity {
     // pub updated_at: chrono::DateTime<chrono::Utc>,
     pub created_by: i64,
     pub updated_by: i64,
+    pub cached_sql_parser_token: Vec<Token>,
 }
 
 pub fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
@@ -52,6 +55,7 @@ pub fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
         )
             .clone();
         let pool = Pool::new(&*mysql_url.clone()).unwrap();
+        let dialect = MySqlDialect {};
         loop {
             let conn_result = pool.get_conn();
 
@@ -61,6 +65,20 @@ pub fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
                         "select id,sql_template,duration from cache_config where enabled = true"
                             .with(())
                             .map(&mut conn, |(id, sql_template, duration)| {
+                                // let sql_pattern = String::from(sql_template);
+                                // let tokens = Tokenizer::new(&dialect, &*sql_pattern)
+                                //     .tokenize()
+                                //     .unwrap_or_default()
+                                //     .into_iter()
+                                //     .filter(|t| {
+                                //         return match t {
+                                //             Token::EOF => false,
+                                //             Token::Whitespace(_) => false,
+                                //             _ => true,
+                                //         };
+                                //     })
+                                //     .collect();
+                                // let sql_pattern = sql_pattern.to_uppercase().trim();
                                 CacheConfigEntity {
                                     id,
                                     sql_template,
@@ -70,6 +88,7 @@ pub fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
                                     enabled: -1,
                                     created_by: -1,
                                     updated_by: -1,
+                                    cached_sql_parser_token: vec![],
                                 }
                             })
                             .unwrap();

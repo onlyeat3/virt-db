@@ -141,9 +141,9 @@ impl PacketHandler for VirtDBMySQLHandler {
 
                 let mysql_dialect = MySqlDialect {};
                 let mut cache_config_entity_option: Option<&CacheConfigEntity> = None;
-                for entity in cache_config_entity_list {
+                for entity in cache_config_entity_list.into_iter() {
                     if utils::sys_sql::is_pattern_match(
-                        &*entity.sql_template.to_uppercase().trim(),
+                        &entity.cached_sql_parser_token,
                         sql.to_uppercase().trim(),
                         &mysql_dialect,
                     ) {

@@ -37,22 +37,8 @@ pub fn normally(dialect: &dyn Dialect, sql: &str) -> String {
 }
 
 
-pub fn is_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bool {
-    let tokens1: Vec<Token> = Tokenizer::new(dialect, pattern)
-        .tokenize()
-        .unwrap_or_default();
+pub fn is_pattern_match(tokens1: &Vec<Token>, sql2: &str, dialect: &MySqlDialect) -> bool {
     let tokens2: Vec<Token> = Tokenizer::new(dialect, sql2).tokenize().unwrap_or_default();
-
-    let tokens1: Vec<Token> = tokens1
-        .into_iter()
-        .filter(|t| {
-            return match t {
-                Token::EOF => false,
-                Token::Whitespace(_) => false,
-                _ => true,
-            };
-        })
-        .collect();
     let tokens2: Vec<Token> = tokens2
         .into_iter()
         .filter(|t| {
