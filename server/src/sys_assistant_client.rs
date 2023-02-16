@@ -1,6 +1,6 @@
+use std::{io, thread, time};
 use std::collections::HashMap;
 use std::env::Args;
-use std::{io, thread, time};
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
@@ -15,14 +15,14 @@ use log::{debug, info};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::MetricKindMask;
 use once_cell::sync::Lazy;
+use redis::{Commands, RedisResult};
 use reqwest::{Body, Client, ClientBuilder, Error, Response};
 use serde::{Deserialize, Serialize};
 
-use crate::math::avg::AveragedCollection;
 use crate::{math, sys_config, utils};
+use crate::math::avg::AveragedCollection;
 use crate::sys_config::VirtDBConfig;
 use crate::utils::sys_path;
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ExecLog {
@@ -45,6 +45,57 @@ pub struct MetricHistory {
     pub cache_hit_count: i32,
     pub created_at: i64,
 }
+
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+pub struct CacheTaskInfo {
+    sql: String,
+    body: String,
+    duration: i32,
+}
+
+impl CacheTaskInfo {
+    pub fn new(sql: String, body: String, duration: i32) -> CacheTaskInfo {
+        CacheTaskInfo {
+            sql,
+            body,
+            duration,
+        }
+    }
+}
+
+static CACHE_TASK_INFO_LIST_MUTEX: Lazy<Mutex<Vec<CacheTaskInfo>>> = Lazy::new(|| {
+    Mutex::new(Vec::new())
+});
+
+pub fn add_cache_task(cache_task_info: CacheTaskInfo) {
+    match CACHE_TASK_INFO_LIST_MUTEX.lock() {
+        Ok(mut list) => {
+            list.push(cache_task_info);
+        }
+        Err(err) => {
+            warn!("get lock fail.{:?}",err);
+        }
+    };
+}
+
+pub fn get_cache_task_info_list_copy() -> Option<Vec<CacheTaskInfo>> {
+    let locked_result = &CACHE_TASK_INFO_LIST_MUTEX.lock();
+    return match locked_result {
+        Ok(list) => {
+            let cloned_list = list.iter()
+                .map(|ele| {
+                    ele.clone()
+                })
+                .collect();
+            Some(cloned_list)
+        }
+        Err(err) => {
+            warn!("get lock fail.{:?}",err);
+            None
+        }
+    };
+}
+
 
 static EXEC_LOG_LIST_MUTEX: Lazy<Mutex<Vec<ExecLog>>> = Lazy::new(|| {
     Mutex::new(Vec::new())
@@ -210,7 +261,7 @@ pub fn enable_metric_writing_job(sys_config: VirtDBConfig) {
             let lines_str = lines_str.as_bytes();
             match writer.write_all(lines_str) {
                 Ok(_) => {
-                    if let Err(e) = writer.flush(){
+                    if let Err(e) = writer.flush() {
                         error!("flush metric history fail.err:{:?}",e);
                     }
                     //success
@@ -218,6 +269,48 @@ pub fn enable_metric_writing_job(sys_config: VirtDBConfig) {
                 }
                 Err(e) => {
                     warn!("write metrics fail:{:?}",e);
+                }
+            }
+        };
+    });
+}
+
+pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig) {
+    let redis_config = sys_config.clone().redis;
+    let redis_ip = redis_config.ip;
+    let redis_port = redis_config.port;
+    let redis_requirepass = redis_config.requirepass;
+
+    let redis_url = format!("redis://{}@{}:{}", redis_requirepass, redis_ip, redis_port);
+    let redis_client = redis::Client::open(redis_url.to_string()).unwrap();
+    let mut redis_conn = redis_client.get_connection().unwrap();
+    thread::spawn(move || {
+        info!("cache handle task started.");
+        loop {
+            let task_info_list = get_cache_task_info_list_copy();
+            if task_info_list.is_none() {
+                continue;
+            }
+            let task_info_list = task_info_list.unwrap();
+            for cache_task_info in task_info_list.into_iter() {
+                let sql = cache_task_info.sql;
+                let redis_key = format!("cache:{:?}", sql);
+                let redis_v = cache_task_info.body;
+                let cache_duration = cache_task_info.duration;
+
+                let rv: RedisResult<Vec<u8>> = redis_conn
+                    .set_ex(
+                        redis_key.clone(),
+                        redis_v,
+                        cache_duration as usize,
+                    );
+                if let Err(err) = rv {
+                    match err.code() {
+                        None => {}
+                        Some(err_code) => {
+                            warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err_code)
+                        }
+                    }
                 }
             }
         };
