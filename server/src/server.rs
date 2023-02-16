@@ -151,6 +151,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                         break;
                     }
                 }
+                trace!("cache_config_entity_option:{:?}",cache_config_entity_option);
                 if cache_config_entity_option.is_none() {
                     return Action::Forward;
                 }
@@ -163,7 +164,7 @@ impl PacketHandler for VirtDBMySQLHandler {
                 if let Ok(redis_v) = cached_value_result {
                     if redis_v != "" {
                         from_cache = true;
-                        trace!("redis_v:{:?}", redis_v);
+                        trace!("[handle_request]redis_v:{:?}", redis_v);
                         ctx.redis_duration = redis_duration;
                         ctx.from_cache = from_cache;
                         // let mut response_bytes = vec![];

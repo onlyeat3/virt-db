@@ -65,30 +65,30 @@ pub fn enable_meta_refresh_job(sys_config: VirtDBConfig) {
                         "select id,sql_template,duration from cache_config where enabled = true"
                             .with(())
                             .map(&mut conn, |(id, sql_template, duration)| {
-                                // let sql_pattern = String::from(sql_template);
-                                // let tokens = Tokenizer::new(&dialect, &*sql_pattern)
-                                //     .tokenize()
-                                //     .unwrap_or_default()
-                                //     .into_iter()
-                                //     .filter(|t| {
-                                //         return match t {
-                                //             Token::EOF => false,
-                                //             Token::Whitespace(_) => false,
-                                //             _ => true,
-                                //         };
-                                //     })
-                                //     .collect();
-                                // let sql_pattern = sql_pattern.to_uppercase().trim();
+                                let sql_pattern:String = sql_template;
+                                let sql_pattern = String::from(sql_pattern.to_uppercase().trim());
+                                let tokens = Tokenizer::new(&dialect, &*sql_pattern)
+                                    .tokenize()
+                                    .unwrap_or_default()
+                                    .into_iter()
+                                    .filter(|t| {
+                                        return match t {
+                                            Token::EOF => false,
+                                            Token::Whitespace(_) => false,
+                                            _ => true,
+                                        };
+                                    })
+                                    .collect();
                                 CacheConfigEntity {
                                     id,
-                                    sql_template,
+                                    sql_template:sql_pattern,
                                     duration,
                                     cache_name: "".to_string(),
                                     remark: "".to_string(),
                                     enabled: -1,
                                     created_by: -1,
                                     updated_by: -1,
-                                    cached_sql_parser_token: vec![],
+                                    cached_sql_parser_token: tokens,
                                 }
                             })
                             .unwrap();
