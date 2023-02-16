@@ -40,9 +40,12 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
     // Create a TCP listener which will listen for incoming connections
     let local_server_socket = TcpListener::bind(&server_addr, &l.handle()).unwrap();
     info!("Listening on: {}", server_addr);
+
+    let worker_threads = num_cpus::get() * 2;
+
     let rt = Builder::new_multi_thread()
         .enable_all()
-        .worker_threads(8)
+        .worker_threads(worker_threads)
         .build()
         .unwrap();
 
