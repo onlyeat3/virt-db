@@ -26,7 +26,7 @@ use crate::protocol::{Action, ConnectionContext, ConnReader, ConnWriter, Packet,
 use crate::protocol::packet_writer::PacketWriter;
 
 use crate::sys_config::{ServerConfig, VirtDBConfig};
-use crate::sys_assistant_client::ExecLog;
+use crate::sys_assistant_client::{add_cache_task, CacheTaskInfo, ExecLog};
 
 
 pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -210,7 +210,6 @@ impl PacketHandler for VirtDBMySQLHandler {
             let sql = sql_option.clone().unwrap();
             // println!("sql:{:?}", sql);
 
-            let redis_key = format!("cache:{:?}", sql);
             // print_packet_chars(&*packet.bytes);
             let mut chars = vec![];
             for packet in packets {
@@ -219,23 +218,9 @@ impl PacketHandler for VirtDBMySQLHandler {
                     chars.push(bytes[i] as char);
                 };
             }
-            let redis_v: String = chars.iter()
+            let cache_v: String = chars.iter()
                 .collect();
-            let rv: RedisResult<Vec<u8>> = self
-                ._redis_conn
-                .set_ex(
-                    redis_key.clone(),
-                    redis_v,
-                    ctx.cache_duration as usize,
-                );
-            if let Err(err) = rv {
-                match err.code() {
-                    None => {}
-                    Some(err_code) => {
-                        warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err_code)
-                    }
-                }
-            }
+            add_cache_task(CacheTaskInfo::new(sql, cache_v, ctx.cache_duration));
         }
         let total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
         sys_assistant_client::record_exec_log(ExecLog {

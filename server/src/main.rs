@@ -19,7 +19,7 @@ use log::{error, info};
 use tokio::runtime::Builder;
 
 use crate::server::start;
-use crate::sys_assistant_client::enable_metric_writing_job;
+use crate::sys_assistant_client::{enable_cache_task_handle_job, enable_metric_writing_job};
 
 mod meta;
 mod sys_assistant_client;
@@ -54,6 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     enable_metric_writing_job(sys_config.clone());
     meta::enable_meta_refresh_job(sys_config.clone());
+    enable_cache_task_handle_job(sys_config.clone());
 
     start(virt_db_config).unwrap();
     Ok(())
