@@ -4,9 +4,19 @@ use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
+use sqlparser::ast::{BinaryOperator, Expr, Query, Select, SetExpr, Statement, Value};
 use sqlparser::dialect::{Dialect, MySqlDialect};
-use sqlparser::parser::Parser;
+use sqlparser::keywords::Keyword;
+use sqlparser::keywords::Keyword::NoKeyword;
+use sqlparser::parser::{Parser, ParserError};
+use sqlparser::parser::ParserError::TokenizerError;
+use sqlparser::{ast, tokenizer};
 use sqlparser::tokenizer::{Token, Tokenizer};
+use sqlparser::tokenizer::Token::{Placeholder, Word};
+#[cfg(test)]
+use test_log::test;
+
+const SYS_DIALECT: MySqlDialect = MySqlDialect {};
 
 pub fn normally(dialect: &dyn Dialect, sql: &str) -> String {
     let mut tokenizer = Tokenizer::new(dialect, &*sql);
@@ -38,8 +48,9 @@ pub fn normally(dialect: &dyn Dialect, sql: &str) -> String {
 
 
 pub fn is_pattern_match(tokens1: &Vec<Token>, sql2: &str, dialect: &MySqlDialect) -> bool {
-    let tokens2: Vec<Token> = Tokenizer::new(dialect, sql2).tokenize().unwrap_or_default();
-    let tokens2: Vec<Token> = tokens2
+    let tokens2: Vec<Token> = Tokenizer::new(dialect, sql2)
+        .tokenize()
+        .unwrap_or_default()
         .into_iter()
         .filter(|t| {
             return match t {
@@ -101,12 +112,125 @@ pub fn is_pattern_match(tokens1: &Vec<Token>, sql2: &str, dialect: &MySqlDialect
     return true;
 }
 
+pub fn trim_tokens(tokens: Vec<Token>) -> Vec<Token> {
+    tokens
+        .into_iter()
+        .filter(|t| {
+            return match t {
+                Token::EOF => false,
+                Token::Whitespace(_) => false,
+                _ => true,
+            };
+        })
+        .collect()
+}
+
+pub fn is_sql_pattern_match(pattern: &str, sql2: &str, dialect: &MySqlDialect) -> bool {
+    let tokens1: Vec<Token> = Tokenizer::new(dialect, pattern)
+        .tokenize()
+        .unwrap_or_default();
+    return is_pattern_match(&tokens1, sql2, dialect);
+}
+
+
+pub fn sql_to_pattern(sql: &str) -> Option<String> {
+    let stmts_result = Parser::parse_sql(&SYS_DIALECT, sql);
+    if let Err(stmts) = stmts_result {
+        return None;
+    }
+    let mut stmts: Vec<Statement> = stmts_result.unwrap();
+    if stmts.len() < 1 {
+        return None;
+    }
+    let ast: Statement = stmts.pop().unwrap();
+    let ast = match ast {
+        Statement::Query(q) => {
+            let mut q = q.clone() as Box<ast::Query>;
+            let tmp_q = q.clone();
+            let result = match q.body {
+                SetExpr::Select(select_expr) => {
+                    let mut select_expr: Box<Select> = select_expr.clone() as Box<Select>;
+                    let expr = select_expr.selection
+                        .map(|expr| {
+                            let new_expr = replace_expr(expr.clone());
+                            new_expr
+                        });
+                    select_expr.selection = expr;
+                    let select = SetExpr::Select(select_expr);
+
+                    let mut sub_query = tmp_q.clone();
+                    sub_query.body = select;
+                    sub_query
+                }
+                SetExpr::Query(x) => {
+                    tmp_q
+                }
+                _ => {
+                    tmp_q
+                }
+            };
+            Some(Statement::Query(result))
+        }
+        _ => {
+            None
+        }
+    };
+    return match ast{
+        None => None,
+        Some(v) => {
+            Some(v.to_string())
+        }
+    };
+}
+
+fn replace_expr(expr: Expr) -> Expr {
+    match expr {
+        Expr::BinaryOp { op, left, right } => {
+            if let BinaryOperator::And = op {
+                Expr::BinaryOp {
+                    op,
+                    left: Box::new(replace_expr(*left)),
+                    right: Box::new(replace_expr(*right)),
+                }
+            } else {
+                Expr::BinaryOp {
+                    op,
+                    left: Box::new(replace_expr(*left)),
+                    right: Box::new(Expr::Value(Value::Placeholder("?".to_string()))),
+                }
+            }
+        }
+        Expr::Between {
+            expr,
+            negated,
+            low,
+            high,
+        } => {
+            let new_low = Box::new(Expr::Value(Value::Placeholder("?".to_string())));
+            let new_high = Box::new(Expr::Value(Value::Placeholder("?".to_string())));
+            Expr::Between {
+                expr: Box::new(replace_expr(*expr)),
+                negated,
+                low: new_low,
+                high: new_high,
+            }
+        }
+        Expr::UnaryOp { op, expr } => {
+            Expr::UnaryOp {
+                op,
+                expr: Box::new(replace_expr(*expr)),
+            }
+        }
+        _ => expr,
+    }
+}
+
 #[test]
 fn test_match() {
     let sql = "SELECT * FROM article where article_id = 116728608290413363";
     let pattern = "SELECT * FROM article where article_id = ?";
     let dialect = MySqlDialect {}; // or AnsiDialect, or your own dialect ...
-    let matched = is_pattern_match(sql, pattern, &dialect);
+    let matched = is_sql_pattern_match(sql, pattern, &dialect);
     println!("pattern:{:?}\nsql:{:?}\neq:{:?}", pattern, sql, matched);
 }
 
@@ -138,7 +262,7 @@ fn test_matchs() {
     sqls.insert("select /*+ QUERY_TIMEOUT(100000000) */ count(1) from article where channel_id = ? and article_oper_type <> ? and article_status = ? and tenant_id = ? and publish_time LIKE CONCAT(?,'%')", "select /*+ QUERY_TIMEOUT(100000000) */ count(1) from article where channel_id = 2 and article_oper_type <> 2 and article_status =1 and tenant_id = 1 and publish_time LIKE CONCAT(11,'%')");
 
     for (pattern, sql) in sqls {
-        let matched = is_pattern_match(pattern, sql, &dialect);
+        let matched = is_sql_pattern_match(pattern, sql, &dialect);
         println!("pattern:{:?}\nsql:{:?}\neq:{:?}\n", pattern, sql, matched);
         assert_eq!(true, matched);
     }
@@ -157,4 +281,24 @@ fn test_sql_verify() {
     let dialect = &MySqlDialect {};
     let normally_sql = normally(dialect, sql);
     assert_ne!(sql, normally_sql)
+}
+
+#[cfg(test)]
+#[test_log::test]
+pub fn test_sql_to_pattern() {
+    let sql = r#"
+       SELECT a.article_id from article a where a.tenant_id = 1
+       and a.aa='a'
+       and a.bb > 1
+       and a.bb < 123
+       and a.bb between 123456 and 123123
+       and a.cc='c'
+       and a.app_id = false
+       and a.article_status = -0.01
+
+       order by a.publish_time desc limit ?,?
+    "#;
+
+    let pattern = sql_to_pattern(sql);
+    println!("ast:{:?}", pattern);
 }

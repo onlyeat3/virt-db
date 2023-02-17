@@ -27,6 +27,7 @@ use crate::protocol::packet_writer::PacketWriter;
 
 use crate::sys_config::{ServerConfig, VirtDBConfig};
 use crate::sys_assistant_client::{add_cache_task, CacheTaskInfo, ExecLog};
+use crate::utils::sys_sql::sql_to_pattern;
 
 
 pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -210,9 +211,6 @@ impl PacketHandler for VirtDBMySQLHandler {
         // info!("sql:{:?},should_update_cache:{:?}",sql,should_update_cache);
         let mysql_duration = (Local::now() - ctx.mysql_exec_start_time).num_milliseconds();
         if should_update_cache {
-            let sql = sql_option.clone().unwrap();
-            // println!("sql:{:?}", sql);
-
             // print_packet_chars(&*packet.bytes);
             let mut chars = vec![];
             for packet in packets {
@@ -223,16 +221,22 @@ impl PacketHandler for VirtDBMySQLHandler {
             }
             let cache_v: String = chars.iter()
                 .collect();
-            add_cache_task(CacheTaskInfo::new(sql, cache_v, ctx.cache_duration));
+            add_cache_task(CacheTaskInfo::new(sql.clone(), cache_v, ctx.cache_duration));
         }
         let total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
-        sys_assistant_client::record_exec_log(ExecLog {
-            sql_str: sql_option.unwrap(),
-            total_duration,
-            mysql_duration,
-            redis_duration: ctx.redis_duration,
-            from_cache: ctx.from_cache,
-        });
+        //只记录select
+        match sql_to_pattern(sql.clone().as_str()){
+            None => {}
+            Some(sql_pattern) => {
+                sys_assistant_client::record_exec_log(ExecLog {
+                    sql_str: sql_pattern,
+                    total_duration,
+                    mysql_duration,
+                    redis_duration: ctx.redis_duration,
+                    from_cache: ctx.from_cache,
+                });
+            }
+        }
         self.context = Rc::new(RefCell::new(ConnectionContext{
             sql: None,
             should_update_cache:false,
