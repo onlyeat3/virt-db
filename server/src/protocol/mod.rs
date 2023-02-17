@@ -333,7 +333,7 @@ impl<H> Future for Pipe<H>
 
                 if let Ok(sql) = String::from_utf8(slice.to_vec()){
                     ctx.sql = Some(sql.clone());
-                    // info!("push sql:{:?}",sql);
+                    trace!("push sql:{:?}",sql);
                 };
             }
 
@@ -343,7 +343,7 @@ impl<H> Future for Pipe<H>
             let mut packets = vec![];
             let mut write_finish = false;
             while let Some(response) = self.server_reader.next() {
-                // info!("ctx:{:?}",ctx);
+                trace!("ctx:{:?}",ctx);
                 packets.push(Packet::new(response.bytes.clone()));
                 match self.handler.handle_response(&response, &mut ctx) {
                     Action::Drop => {}
@@ -361,7 +361,8 @@ impl<H> Future for Pipe<H>
                 };
                 write_finish = true;
             }
-            if write_finish {
+            trace!("write_finish:{:?}",write_finish);
+            if write_finish{
                 // let mut chars = vec![];
                 // for x in packets {
                 //     for v in x.bytes {
