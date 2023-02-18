@@ -7,7 +7,7 @@ use actix_cors::Cors;
 use actix_settings::{ApplySettings as _, BasicSettings};
 use actix_web::http::header;
 use actix_web::middleware::{Compress, Condition, Logger};
-use actix_web::{get, http, post, web, App, HttpServer, Responder};
+use actix_web::{get, http, post, web, App, HttpServer, Responder, HttpResponse};
 use log::info;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use serde::{de, Deserialize};
@@ -46,7 +46,7 @@ async fn main() -> std::io::Result<()> {
         .acquire_timeout(Duration::from_secs(8))
         .idle_timeout(Duration::from_secs(8))
         .max_lifetime(Duration::from_secs(8))
-        .sqlx_logging(true)
+        .sqlx_logging(false)
         .sqlx_logging_level(log::LevelFilter::Info); // Setting default PostgreSQL schema
 
     let conn = Database::connect(opt).await.unwrap();
@@ -58,7 +58,9 @@ async fn main() -> std::io::Result<()> {
     let http_server = HttpServer::new({
         let settings = settings.clone();
         move || {
-            //vt-server节点，存活的节点保存在内存
+            let json_cfg = web::JsonConfig::default()
+                // limit request payload size
+                .limit(1024*1024*10);
             App::new()
                 .wrap(Logger::default())
                 .wrap(Condition::new(
@@ -76,6 +78,8 @@ async fn main() -> std::io::Result<()> {
                         .supports_credentials()
                         .max_age(3600),
                 )
+                .app_data(json_cfg)
+
                 // .service(controller::index_controller::index)
                 .service(controller::user_controller::login)
                 .service(controller::user_controller::update_password)
@@ -89,6 +93,7 @@ async fn main() -> std::io::Result<()> {
 
                 // 必须在最后
                 .service(actix_files::Files::new( "/",settings.application.clone().static_dir).index_file("index.html"))
+            //vt-server节点，存活的节点保存在内存
         }
     })
     .apply_settings(&settings)
