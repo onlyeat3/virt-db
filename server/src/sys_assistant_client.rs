@@ -10,13 +10,15 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use chrono::{DateTime, Local};
+use crossbeam::channel::Receiver;
 use itertools::Itertools;
 use log::{debug, info};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::MetricKindMask;
 use once_cell::sync::Lazy;
 use redis::{Commands, RedisResult};
-use reqwest::{Body, Client, ClientBuilder, Error, Response};
+use reqwest::blocking::Response;
+use reqwest::Error;
 use serde::{Deserialize, Serialize};
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::Parser;
@@ -98,106 +100,13 @@ pub fn get_cache_task_info_list_copy() -> Option<Vec<CacheTaskInfo>> {
     };
 }
 
-
-static EXEC_LOG_LIST_MUTEX: Lazy<Mutex<Vec<ExecLog>>> = Lazy::new(|| {
-    Mutex::new(Vec::new())
-});
-
-pub fn get_exec_log_list_copy() -> Option<Vec<ExecLog>> {
-    let locked_result = &EXEC_LOG_LIST_MUTEX.lock();
-    return match locked_result {
-        Ok(exec_log_list) => {
-            let cloned_list = exec_log_list.iter()
-                .map(|ele| {
-                    ele.clone()
-                })
-                .collect();
-            Some(cloned_list)
-        }
-        Err(err) => {
-            warn!("get lock fail.{:?}",err);
-            None
-        }
-    };
-}
-
-pub fn record_exec_log(exec_log: ExecLog) {
-    let locked_result = EXEC_LOG_LIST_MUTEX.lock();
-    match locked_result {
-        Ok(mut exec_log_list) => {
-            trace!("add new exec_log:{:?}",exec_log);
-            exec_log_list.push(exec_log);
-        }
-        Err(err) => {
-            warn!("Get EXEC_LOG_LIST fail:{:?}",err);
-        }
-    };
-}
-
-pub fn remove_exec_logs(expired_exec_log_list: &Vec<ExecLog>) {
-    let locked_result = EXEC_LOG_LIST_MUTEX.lock();
-    match locked_result {
-        Ok(mut exec_log_list) => {
-            exec_log_list.retain(|ele| {
-                for expired_exec_log in expired_exec_log_list {
-                    if ele == expired_exec_log {
-                        return false;
-                    }
-                }
-                return true;
-            });
-        }
-        Err(err) => {
-            warn!("Get EXEC_LOG_LIST fail:{:?}",err);
-        }
-    };
-}
-
-
-pub fn enable_metric_writing_job(sys_config: VirtDBConfig) {
+pub fn enable_metric_writing_job(sys_config: VirtDBConfig, channel_receiver: Receiver<ExecLog>) {
     thread::spawn(move || {
         info!("metric data writing task started.");
-
-        let mut origin_now_str = utils::sys_datetime::now_str_data_file_name();
-        let target_file = sys_path::resolve_as_current_path(format!("{}.json", origin_now_str)).unwrap();
-        let target_file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open(target_file)
-            .unwrap();
-        let mut writer = BufWriter::new(target_file);
-
         loop {
-            // sleep(Duration::from_secs(5));
-
-            let now_str = utils::sys_datetime::now_str_data_file_name();
-            if now_str != origin_now_str {
-                let target_file = sys_path::resolve_as_current_path(format!("{}.json", origin_now_str));
-                if target_file.is_none() {
-                    error!("Can not get current exe path");
-                    continue;
-                }
-                let target_file = target_file.unwrap();
-                let target_file = OpenOptions::new()
-                    .write(true)
-                    .append(true)
-                    .create(true)
-                    .open(target_file);
-                if target_file.is_err() {
-                    let err = target_file.err().unwrap();
-                    error!("Can not get current exe path.err:{:?}",err);
-                    continue;
-                }
-                let target_file = target_file.unwrap();
-                writer = BufWriter::new(target_file);
-            }
-
-            let exec_log_list_result = get_exec_log_list_copy();
-            if let None = exec_log_list_result {
-                return;
-            }
-            let exec_log_list = exec_log_list_result.unwrap();
+            sleep(Duration::from_secs(5));
+            let exec_log_list:Vec<ExecLog> = channel_receiver.try_iter()
+                .collect();
 
             let metric_history_list = exec_log_list.iter()
                 .sorted_by_key(|v| v.sql_str.clone())
@@ -242,37 +151,30 @@ pub fn enable_metric_writing_job(sys_config: VirtDBConfig) {
                     metric_history
                 })
                 .collect::<Vec<MetricHistory>>();
-            let mut lines = vec![];
-            for metric_history in metric_history_list {
-                match serde_json::to_string(&metric_history) {
-                    Ok(json_v) => {
-                        lines.push(json_v);
-                    }
-                    Err(e) => {
-                        warn!("Convert Vec<MetricHistory> to json fail:{:?}",e);
-                    }
-                };
-            }
 
-            if lines.len() < 1 {
-                continue;
-            }
-
-            let lines_str = lines.join("\n");
-            // info!("v:{:?}",lines_str);
-            let lines_str = lines_str.as_bytes();
-            match writer.write_all(lines_str) {
-                Ok(_) => {
-                    if let Err(e) = writer.flush() {
-                        error!("flush metric history fail.err:{:?}",e);
+            let result = register(&sys_config, metric_history_list);
+            let _ = match result {
+                Ok(response) => {
+                    if response.status().as_u16() != 200 {
+                        warn!("register vt_node fail. response:{:?}",response);
+                    }else{
+                        let data_wrapper_result = response.json::<DataWrapper<String>>();
+                        match data_wrapper_result {
+                            Ok(data_wrapper) => {
+                                if !data_wrapper.success {
+                                    warn!("register vt_node fail. response:{:?}",data_wrapper);
+                                }
+                            }
+                            Err(e) => {
+                                warn!("register vt_node fail:{:?}",e);
+                            }
+                        };
                     }
-                    //success
-                    remove_exec_logs(&exec_log_list);
                 }
                 Err(e) => {
-                    warn!("write metrics fail:{:?}",e);
+                    warn!("register vt_node fail:{:?}",e);
                 }
-            }
+            };
         };
     });
 }
@@ -317,4 +219,42 @@ pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig) {
             }
         };
     });
+}
+
+
+static HTTP_CLIENT: Lazy<reqwest::blocking::Client> = Lazy::new(|| {
+    reqwest::blocking::Client::new()
+});
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataWrapper<V> {
+    pub code: i32,
+    pub message: String,
+    pub success: bool,
+    pub data: Option<V>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VtNodeRegisterParam {
+    pub port: String,
+    pub metric_history_list: Vec<MetricHistory>,
+}
+
+fn register(sys_config: &VirtDBConfig, metric_history_list: Vec<MetricHistory>) -> Result<Response, Error> {
+    let address = sys_config.admin.address.clone();
+    let register_api_url = format!("{}/vt_node/register", address);
+    let params = VtNodeRegisterParam {
+        port: sys_config.server.port.to_string(),
+        metric_history_list,
+    };
+
+    let request_body = serde_json::to_string(&params).unwrap();
+    debug!("[job]request body:{}",request_body);
+    let response = HTTP_CLIENT
+        .post(register_api_url)
+        .header("Content-Type", "application/json")
+        .body(request_body)
+        .send()?;
+    return Ok(response);
 }

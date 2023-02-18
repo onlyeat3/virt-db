@@ -11,12 +11,14 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use chrono::Local;
+use crossbeam::channel::{Sender, SendError, unbounded};
 
 use futures::Future;
 use futures::stream::Stream;
 use redis::{Commands, Connection, RedisError, RedisResult};
 use sqlparser::dialect::MySqlDialect;
 use tokio::runtime::Builder;
+use tokio::sync::mpsc;
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor::Core;
 
@@ -30,7 +32,7 @@ use crate::sys_assistant_client::{add_cache_task, CacheTaskInfo, ExecLog};
 use crate::utils::sys_sql::sql_to_pattern;
 
 
-pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>> {
+pub fn start(sys_config: VirtDBConfig, channel_sender: Sender<ExecLog>) -> Result<(), Box<dyn std::error::Error>> {
     let server_addr = format!("0.0.0.0:{:?}", sys_config.clone().server.port);
     let server_addr = SocketAddr::from_str(server_addr.as_str()).unwrap();
 
@@ -60,6 +62,7 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
 
     // for each incoming connection
     let done = local_server_socket.incoming().for_each(move |(client_input_stream, _)| {
+        let channel_sender = channel_sender.clone();
         return rt.block_on(async {
             let sys_config = sys_config.clone();
             //TODO pool mysql+redis ?
@@ -87,7 +90,7 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
             let future = TcpStream::connect(&mysql_addr, &handle)
                 .and_then(move |mysql| Ok((client_input_stream, mysql)))
                 .and_then(move |(client, server)| {
-                    run(client, server, redis_conn, sys_config.clone())
+                    run(client, server, redis_conn, sys_config.clone(),channel_sender)
                 });
 
             // tell the tokio reactor to run the future
@@ -107,11 +110,12 @@ pub fn start(sys_config: VirtDBConfig) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-pub fn run(client: TcpStream, server: TcpStream, redis_conn: Connection, sys_config: VirtDBConfig) -> Pipe<VirtDBMySQLHandler> {
+pub fn run(client: TcpStream, server: TcpStream, redis_conn: Connection, sys_config: VirtDBConfig, channel_sender: Sender<ExecLog>) -> Pipe<VirtDBMySQLHandler> {
     Pipe::new(Rc::new(client), Rc::new(server), VirtDBMySQLHandler {
         _redis_conn: redis_conn,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
+        channel_sender,
         context: Rc::new(RefCell::new(ConnectionContext { sql: None, should_update_cache: false, fn_start_time: Local::now(), mysql_exec_start_time: Default::default(), redis_duration: 0, from_cache: false, cache_duration: 0 })),
     })
 }
@@ -123,6 +127,7 @@ pub struct VirtDBMySQLHandler {
     dialect: MySqlDialect,
     server_config: VirtDBConfig,
     context: Rc<RefCell<ConnectionContext>>,
+    pub channel_sender: Sender<ExecLog>,
 }
 
 impl PacketHandler for VirtDBMySQLHandler {
@@ -228,13 +233,19 @@ impl PacketHandler for VirtDBMySQLHandler {
         match sql_to_pattern(sql.clone().as_str()){
             None => {}
             Some(sql_pattern) => {
-                sys_assistant_client::record_exec_log(ExecLog {
+                let send_result = self.channel_sender.send(ExecLog {
                     sql_str: sql_pattern,
                     total_duration,
                     mysql_duration,
                     redis_duration: ctx.redis_duration,
                     from_cache: ctx.from_cache,
                 });
+                match send_result {
+                    Ok(_) => {}
+                    Err(err) => {
+                        warn!("Send ExecLog fail.err:{:?}",err);
+                    }
+                }
             }
         }
         self.context = Rc::new(RefCell::new(ConnectionContext{

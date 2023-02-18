@@ -15,6 +15,7 @@ extern crate tokio_core;
 use std::error::Error;
 
 use clap::{AppSettings, Parser};
+use crossbeam::channel::unbounded;
 use log::{error, info};
 use tokio::runtime::Builder;
 
@@ -52,10 +53,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sys_config = sys_config_wrapper.unwrap();
     let virt_db_config = sys_config.clone();
 
-    enable_metric_writing_job(sys_config.clone());
+    let (channel_sender, channel_receiver) = unbounded();
+
+    enable_metric_writing_job(sys_config.clone(),channel_receiver);
     meta::enable_meta_refresh_job(sys_config.clone());
     enable_cache_task_handle_job(sys_config.clone());
 
-    start(virt_db_config).unwrap();
+    start(virt_db_config,channel_sender).unwrap();
     Ok(())
 }
