@@ -31,6 +31,7 @@ mod utils;
 mod math;
 mod protocol;
 mod sys_error;
+mod sys_redis;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

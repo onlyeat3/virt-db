@@ -16,7 +16,8 @@ use log::{debug, info};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::MetricKindMask;
 use once_cell::sync::Lazy;
-use redis::{Commands, RedisResult};
+use redis::{Client, Commands, RedisResult};
+use redis::cluster::ClusterClient;
 use reqwest::blocking::Response;
 use reqwest::Error;
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,7 @@ use sqlparser::parser::Parser;
 use crate::{math, sys_config, utils};
 use crate::math::avg::AveragedCollection;
 use crate::sys_config::VirtDBConfig;
+use crate::sys_redis::SysRedisClient;
 use crate::utils::sys_path;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -180,21 +182,15 @@ pub fn enable_metric_writing_job(sys_config: VirtDBConfig, channel_receiver: Rec
 }
 
 pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig, cache_load_task_channel_receiver: Receiver<CacheTaskInfo>) {
-    let redis_config = sys_config.clone().redis;
-    let redis_ip = redis_config.ip;
-    let redis_port = redis_config.port;
-    let redis_requirepass = redis_config.requirepass;
-
-    let redis_url = format!("redis://{}@{}:{}", redis_requirepass, redis_ip, redis_port);
-    let redis_client = redis::Client::open(redis_url.to_string()).unwrap();
+    let nodes = sys_config.redis.nodes;
     info!("cache handle task started.");
 
     for _ in 0..num_cpus::get() {
-        let mut redis_conn = redis_client.get_connection().unwrap();
         let cache_load_task_channel_receiver = cache_load_task_channel_receiver.clone();
+        let nodes = nodes.clone();
         thread::spawn(move || {
             let cache_load_task_channel_receiver = cache_load_task_channel_receiver;
-            let mut redis_conn = redis_conn;
+            let mut sys_redis_client = SysRedisClient::new(nodes.as_str()).unwrap();
             loop {
                 match cache_load_task_channel_receiver.recv() {
                     Ok(cache_task_info) => {
@@ -203,10 +199,10 @@ pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig, cache_load_task_ch
                         let redis_v = cache_task_info.body;
                         let cache_duration = cache_task_info.duration;
 
-                        let rv: RedisResult<Vec<u8>> = redis_conn
+                        let rv: RedisResult<()> = sys_redis_client
                             .set_ex(
-                                redis_key.clone(),
-                                redis_v,
+                                &*redis_key.clone(),
+                                &*redis_v,
                                 cache_duration as usize,
                             );
                         if let Err(err) = rv {

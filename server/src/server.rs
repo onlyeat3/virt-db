@@ -15,7 +15,8 @@ use crossbeam::channel::{Sender, SendError, unbounded};
 
 use futures::Future;
 use futures::stream::Stream;
-use redis::{Commands, Connection, RedisError, RedisResult};
+use redis::{Client, Commands, Connection, RedisError, RedisResult};
+use redis::cluster::{ClusterClient, ClusterConnection};
 use sqlparser::dialect::MySqlDialect;
 use tokio::runtime::Builder;
 use tokio::sync::mpsc;
@@ -29,6 +30,7 @@ use crate::protocol::packet_writer::PacketWriter;
 
 use crate::sys_config::{ServerConfig, VirtDBConfig};
 use crate::sys_assistant_client::{add_cache_task, CacheTaskInfo, ExecLog};
+use crate::sys_redis::SysRedisClient;
 use crate::utils::sys_sql::sql_to_pattern;
 
 
@@ -52,13 +54,6 @@ pub fn start(sys_config: VirtDBConfig, exec_log_channel_sender: Sender<ExecLog>,
         .build()
         .unwrap();
 
-    let redis_config = sys_config.clone().redis;
-    let redis_ip = redis_config.ip;
-    let redis_port = redis_config.port;
-    let redis_requirepass = redis_config.requirepass;
-
-    let redis_url = format!("redis://{}@{}:{}", redis_requirepass, redis_ip, redis_port);
-    let redis_client = redis::Client::open(redis_url.to_string()).unwrap();
 
     // for each incoming connection
     let done = local_server_socket.incoming().for_each(move |(client_input_stream, _)| {
@@ -73,12 +68,11 @@ pub fn start(sys_config: VirtDBConfig, exec_log_channel_sender: Sender<ExecLog>,
             let mysql_ip = mysql_config.ip;
             let mysql_port = mysql_config.port;
 
-            let redis_conn_result = redis_client.get_connection();
-            if let Err(err) = redis_conn_result {
-                warn!("Connect Backend Redis fail.err:{:?}",err);
+            let sys_redis_client_result = SysRedisClient::new(sys_config.redis.nodes.as_str());
+            if sys_redis_client_result.is_err() {
                 return Ok(());
             }
-            let redis_conn = redis_conn_result.unwrap();
+            let sys_redis_client = sys_redis_client_result.unwrap();
 
             let mysql_addr = format!("{}:{}", mysql_ip, mysql_port);
             let mysql_addr_result = SocketAddr::from_str(mysql_addr.as_str());
@@ -91,7 +85,7 @@ pub fn start(sys_config: VirtDBConfig, exec_log_channel_sender: Sender<ExecLog>,
             let future = TcpStream::connect(&mysql_addr, &handle)
                 .and_then(move |mysql| Ok((client_input_stream, mysql)))
                 .and_then(move |(client, server)| {
-                    run(client, server, redis_conn, sys_config.clone(), exec_log_channel_sender, cache_load_task_channel_sender)
+                    run(client, server, sys_redis_client, sys_config.clone(), exec_log_channel_sender, cache_load_task_channel_sender)
                 });
 
             // tell the tokio reactor to run the future
@@ -111,9 +105,9 @@ pub fn start(sys_config: VirtDBConfig, exec_log_channel_sender: Sender<ExecLog>,
     Ok(())
 }
 
-pub fn run(client: TcpStream, server: TcpStream, redis_conn: Connection, sys_config: VirtDBConfig, exec_log_channel_sender: Sender<ExecLog>, cache_load_task_channel_sender: Sender<CacheTaskInfo>) -> Pipe<VirtDBMySQLHandler> {
+pub fn run(client: TcpStream, server: TcpStream, _sys_redis_client: SysRedisClient, sys_config: VirtDBConfig, exec_log_channel_sender: Sender<ExecLog>, cache_load_task_channel_sender: Sender<CacheTaskInfo>) -> Pipe<VirtDBMySQLHandler> {
     Pipe::new(Rc::new(client), Rc::new(server), VirtDBMySQLHandler {
-        _redis_conn: redis_conn,
+        _sys_redis_client,
         dialect: MySqlDialect {},
         server_config: sys_config.clone(),
         exec_log_channel_sender,
@@ -124,7 +118,7 @@ pub fn run(client: TcpStream, server: TcpStream, redis_conn: Connection, sys_con
 
 
 pub struct VirtDBMySQLHandler {
-    _redis_conn: Connection,
+    _sys_redis_client: SysRedisClient,
     // NOTE: not *actually* static, but tied to our connection's lifetime.
     dialect: MySqlDialect,
     server_config: VirtDBConfig,
@@ -172,10 +166,10 @@ impl PacketHandler for VirtDBMySQLHandler {
                 }
 
                 let redis_get_start_time = Local::now();
-                let cache_key_exists_check_result:RedisResult<bool> = self._redis_conn.exists(redis_key.clone());
-                if let Ok(cache_key_exists) = cache_key_exists_check_result{
+                let cache_key_exists_check_result: RedisResult<bool> = self._sys_redis_client.exists(redis_key.clone().as_str());
+                if let Ok(cache_key_exists) = cache_key_exists_check_result {
                     if cache_key_exists {
-                        let cached_value_result: Result<String, RedisError> = self._redis_conn.get(redis_key.clone());
+                        let cached_value_result: Result<String, RedisError> = self._sys_redis_client.get(redis_key.clone().as_str());
 
                         redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
 

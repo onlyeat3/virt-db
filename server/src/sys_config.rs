@@ -51,9 +51,7 @@ pub struct MetricConfig {
  */
 #[derive(Debug, Deserialize, Clone)]
 pub struct RedisServerConfig {
-    pub ip: String,
-    pub port: i32,
-    pub requirepass: String,
+    pub nodes: String,
 }
 
 /**
