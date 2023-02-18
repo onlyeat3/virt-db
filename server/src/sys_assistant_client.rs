@@ -10,7 +10,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use chrono::{DateTime, Local};
-use crossbeam::channel::Receiver;
+use crossbeam::channel::{Receiver, RecvError};
 use itertools::Itertools;
 use log::{debug, info};
 use metrics_exporter_prometheus::PrometheusBuilder;
@@ -105,7 +105,7 @@ pub fn enable_metric_writing_job(sys_config: VirtDBConfig, channel_receiver: Rec
         info!("metric data writing task started.");
         loop {
             sleep(Duration::from_secs(5));
-            let exec_log_list:Vec<ExecLog> = channel_receiver.try_iter()
+            let exec_log_list: Vec<ExecLog> = channel_receiver.try_iter()
                 .collect();
 
             let metric_history_list = exec_log_list.iter()
@@ -157,7 +157,7 @@ pub fn enable_metric_writing_job(sys_config: VirtDBConfig, channel_receiver: Rec
                 Ok(response) => {
                     if response.status().as_u16() != 200 {
                         warn!("register vt_node fail. response:{:?}",response);
-                    }else{
+                    } else {
                         let data_wrapper_result = response.json::<DataWrapper<String>>();
                         match data_wrapper_result {
                             Ok(data_wrapper) => {
@@ -179,7 +179,7 @@ pub fn enable_metric_writing_job(sys_config: VirtDBConfig, channel_receiver: Rec
     });
 }
 
-pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig) {
+pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig, cache_load_task_channel_receiver: Receiver<CacheTaskInfo>) {
     let redis_config = sys_config.clone().redis;
     let redis_ip = redis_config.ip;
     let redis_port = redis_config.port;
@@ -187,38 +187,44 @@ pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig) {
 
     let redis_url = format!("redis://{}@{}:{}", redis_requirepass, redis_ip, redis_port);
     let redis_client = redis::Client::open(redis_url.to_string()).unwrap();
-    let mut redis_conn = redis_client.get_connection().unwrap();
-    thread::spawn(move || {
-        info!("cache handle task started.");
-        loop {
-            let task_info_list = get_cache_task_info_list_copy();
-            if task_info_list.is_none() {
-                continue;
-            }
-            let task_info_list = task_info_list.unwrap();
-            for cache_task_info in task_info_list.into_iter() {
-                let sql = cache_task_info.sql;
-                let redis_key = format!("cache:{:?}", sql);
-                let redis_v = cache_task_info.body;
-                let cache_duration = cache_task_info.duration;
+    info!("cache handle task started.");
 
-                let rv: RedisResult<Vec<u8>> = redis_conn
-                    .set_ex(
-                        redis_key.clone(),
-                        redis_v,
-                        cache_duration as usize,
-                    );
-                if let Err(err) = rv {
-                    match err.code() {
-                        None => {}
-                        Some(err_code) => {
-                            warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err_code)
+    for _ in 0..num_cpus::get() {
+        let mut redis_conn = redis_client.get_connection().unwrap();
+        let cache_load_task_channel_receiver = cache_load_task_channel_receiver.clone();
+        thread::spawn(move || {
+            let cache_load_task_channel_receiver = cache_load_task_channel_receiver;
+            let mut redis_conn = redis_conn;
+            loop {
+                match cache_load_task_channel_receiver.recv() {
+                    Ok(cache_task_info) => {
+                        let sql = cache_task_info.sql;
+                        let redis_key = format!("cache:{:?}", sql);
+                        let redis_v = cache_task_info.body;
+                        let cache_duration = cache_task_info.duration;
+
+                        let rv: RedisResult<Vec<u8>> = redis_conn
+                            .set_ex(
+                                redis_key.clone(),
+                                redis_v,
+                                cache_duration as usize,
+                            );
+                        if let Err(err) = rv {
+                            match err.code() {
+                                None => {}
+                                Some(err_code) => {
+                                    warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err_code)
+                                }
+                            }
                         }
                     }
+                    Err(err) => {
+                        warn!("Receive CacheTaskInfo fail.err:{:?}",err);
+                    }
                 }
-            }
-        };
-    });
+            };
+        });
+    }
 }
 
 

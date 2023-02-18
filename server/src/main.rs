@@ -53,12 +53,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sys_config = sys_config_wrapper.unwrap();
     let virt_db_config = sys_config.clone();
 
-    let (channel_sender, channel_receiver) = unbounded();
+    let (exec_log_channel_sender, exec_log_channel_receiver) = unbounded();
+    let (cache_load_task_channel_sender, cache_load_task_channel_receiver) = unbounded();
 
-    enable_metric_writing_job(sys_config.clone(),channel_receiver);
+    enable_metric_writing_job(sys_config.clone(), exec_log_channel_receiver);
     meta::enable_meta_refresh_job(sys_config.clone());
-    enable_cache_task_handle_job(sys_config.clone());
+    enable_cache_task_handle_job(sys_config.clone(),cache_load_task_channel_receiver);
 
-    start(virt_db_config,channel_sender).unwrap();
+    start(virt_db_config, exec_log_channel_sender,cache_load_task_channel_sender).unwrap();
     Ok(())
 }
