@@ -142,6 +142,9 @@ impl PacketHandler for VirtDBMySQLHandler {
                 let slice = &p.bytes[5..];
                 // convert the slice to a String object
                 let sql = String::from_utf8(slice.to_vec()).expect("Invalid UTF-8");
+                if !sql.clone().to_uppercase().starts_with("SELECT") {
+                    return Action::Forward;
+                }
 
                 let mut redis_duration = 0;
                 let mut from_cache = false;
@@ -169,24 +172,29 @@ impl PacketHandler for VirtDBMySQLHandler {
                 }
 
                 let redis_get_start_time = Local::now();
-                let cached_value_result: Result<String, RedisError> = self._redis_conn.get(redis_key.clone());
+                let cache_key_exists_check_result:RedisResult<bool> = self._redis_conn.exists(redis_key.clone());
+                if let Ok(cache_key_exists) = cache_key_exists_check_result{
+                    if cache_key_exists {
+                        let cached_value_result: Result<String, RedisError> = self._redis_conn.get(redis_key.clone());
 
-                redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+                        redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
 
-                if let Ok(redis_v) = cached_value_result {
-                    if redis_v != "" {
-                        from_cache = true;
-                        trace!("[handle_request]redis_v:{:?}", redis_v);
-                        ctx.redis_duration = redis_duration;
-                        ctx.from_cache = from_cache;
-                        // let mut response_bytes = vec![];
-                        let chars = redis_v.chars().into_iter();
-                        let mut ps = vec![];
-                        for x in chars.into_iter() {
-                            ps.push(Packet::new(vec![x as u8]));
-                            // response_bytes.push(x as u8);
+                        if let Ok(redis_v) = cached_value_result {
+                            if redis_v != "" {
+                                from_cache = true;
+                                trace!("[handle_request]redis_v:{:?}", redis_v);
+                                ctx.redis_duration = redis_duration;
+                                ctx.from_cache = from_cache;
+                                // let mut response_bytes = vec![];
+                                let chars = redis_v.chars().into_iter();
+                                let mut ps = vec![];
+                                for x in chars.into_iter() {
+                                    ps.push(Packet::new(vec![x as u8]));
+                                    // response_bytes.push(x as u8);
+                                }
+                                return Action::Respond(ps);
+                            }
                         }
-                        return Action::Respond(ps);
                     }
                 }
                 // info!("sql:{:?},should_update_cache:{:?}",sql,true);
