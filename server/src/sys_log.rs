@@ -1,15 +1,12 @@
 #![allow(unused_variables)]
 use std::env;
-use std::io::Write;
-use std::path::Path;
 
-use chrono::Local;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::append::rolling_file::{policy, RollingFileAppender};
 use log4rs::append::rolling_file::policy::compound::CompoundPolicy;
 use log4rs::Config;
-use log4rs::config::{Appender, Logger, Root};
+use log4rs::config::{Appender, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log::LevelFilter;
 

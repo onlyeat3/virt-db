@@ -1,25 +1,16 @@
 #![allow(unused_imports, dead_code)]
 extern crate byteorder;
 extern crate core;
-#[macro_use]
 extern crate futures;
-extern crate lazy_static;
+// extern crate lazy_static;
 #[macro_use]
 extern crate log;
-extern crate mysql_common as myc;
-extern crate mysql_common;
 extern crate tokio;
-#[macro_use]
-extern crate tokio_core;
 
 use std::error::Error;
-use std::io;
-use std::sync::mpsc::channel;
 
 use clap::{AppSettings, Parser};
-use crossbeam::channel::unbounded;
-use log::{error, info};
-use tokio::runtime::Builder;
+use log::{error};
 use tokio::sync::mpsc;
 
 use crate::server::start;

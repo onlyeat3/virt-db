@@ -1,5 +1,5 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 
 pub fn resolve_as_current_path(s: String) -> Option<PathBuf> {
     let result = env::current_exe();

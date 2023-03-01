@@ -2,6 +2,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use chrono::{DateTime, Local};
+// use mysql_common::proto::codec::CompDecoder::Packet;
 
 use redis::aio::{Connection};
 use redis::{AsyncCommands, RedisResult};
@@ -12,10 +13,11 @@ use tokio::net::{TcpListener as AsyncTcpListener, TcpStream as AsyncTcpStream};
 use tokio::sync::{mpsc, Mutex};
 use tokio::sync::mpsc::Sender;
 use crate::meta::CacheConfigEntity;
-use crate::protocol::{Packet, PacketType};
+// use crate::protocol::{Packet, PacketType};
 use crate::sys_assistant_client::{CacheTaskInfo, ExecLog};
 use crate::sys_config::VirtDBConfig;
 use crate::{meta, utils};
+use crate::protocol::{Packet, PacketType};
 use crate::utils::sys_sql::sql_to_pattern;
 
 pub enum Action {
@@ -48,7 +50,7 @@ pub async fn handle_client(
         }
     };
 
-    let (mut client_reader, mut client_writer) = client_stream.split();
+    let (mut client_reader, client_writer) = client_stream.split();
     let (mut remote_reader, mut remote_writer) = remote_stream.split();
 
     let (ctx_sender, mut ctx_receiver) = mpsc::channel(1);
@@ -84,7 +86,7 @@ pub async fn handle_client(
                         cache_duration: 0,
                     };
                     let packet = Packet::new(buf.to_vec());
-                    if let Err(err) = packet.packet_type() {
+                    if let Err(_) = packet.packet_type() {
                         ctx_sender.send(ctx).await.unwrap();
                         remote_writer.write_all(&buf[..n]).await?;
                         continue;
@@ -158,7 +160,7 @@ pub async fn handle_client(
 
                     if let Some(new_ctx) = cached_ctx.clone() {
                         if new_ctx.should_update_cache {
-                            if let Some(sql) = new_ctx.sql.clone() {
+                            if let Some(_) = new_ctx.sql.clone() {
                                 if new_ctx.should_update_cache {
                                     cached_buf.extend_from_slice(&buf[..n]);
                                     // println!("cache response local");
@@ -251,7 +253,6 @@ impl VirtDBConnectionHandler {
 
     pub async fn handle_request(&mut self, mut ctx: &mut ProxyContext, packet_type: PacketType) -> Action {
         // println!("packet_type:{:?},sql:{:?}", packet_type.clone(), sql.clone());
-        let mut redis_duration = 0;
         ctx.fn_start_time = Local::now();
 
         if let None = ctx.sql {
@@ -297,35 +298,41 @@ impl VirtDBConnectionHandler {
                 let redis_get_start_time = Local::now();
                 let cache_key = format!("cache:\"{}\"", sql);
                 let cache_exists_check_result: RedisResult<bool> = self.redis_conn.exists(cache_key.clone()).await;
-                if let Err(err) = cache_exists_check_result {
+                if let Err(_) = cache_exists_check_result {
                     // println!("continue2");
+                    ctx.cache_duration = cache_config_entity_option.unwrap().duration;
+                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
                     return Action::FORWARD;
                 }
                 let is_exists = cache_exists_check_result.unwrap();
                 if !is_exists {
                     ctx.should_update_cache = true;
                     ctx.cache_duration = cache_config_entity_option.unwrap().duration;
+                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
                     // println!("continue3");
                     return Action::FORWARD;
                 }
 
                 let cache_v_result: RedisResult<Vec<u8>> =
                     self.redis_conn.get(cache_key).await;
-                if let Err(err) = cache_v_result {
+                if let Err(_) = cache_v_result {
                     // println!("continue4");
+                    ctx.cache_duration = cache_config_entity_option.unwrap().duration;
+                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
                     return Action::FORWARD;
                 }
 
-                let mut cache_v = cache_v_result.unwrap();
+                let cache_v = cache_v_result.unwrap();
 
                 if cache_v.len() < 1 {
                     // println!("continue5");
+                    ctx.cache_duration = cache_config_entity_option.unwrap().duration;
+                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
                     return Action::FORWARD;
                 }
 
-                redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
                 trace!("[handle_request]redis_v:{:?}", cache_v);
-                ctx.redis_duration = redis_duration;
+                ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
                 ctx.from_cache = true;
 
                 Action::RESPONSED(cache_v)

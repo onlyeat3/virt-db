@@ -24,8 +24,8 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{meta, sys_assistant_client, utils};
 use crate::meta::CacheConfigEntity;
-use crate::protocol::{Action, ConnectionContext, ConnReader, ConnWriter, Packet, PacketHandler, PacketType, Pipe};
-use crate::protocol::packet_writer::PacketWriter;
+// use crate::protocol::{Action, ConnectionContext, ConnReader, ConnWriter, Packet, PacketHandler, PacketType, Pipe};
+// use crate::protocol::packet_writer::PacketWriter;
 use crate::serve::{handle_client, VirtDBConnectionHandler};
 use crate::sys_assistant_client::{CacheTaskInfo, ExecLog};
 
@@ -54,7 +54,7 @@ pub async fn start(sys_config: VirtDBConfig, exec_log_channel_sender: Sender<Exe
 
         info!("Accepted connection from {}", client_addr);
         tokio::spawn(async move {
-            let mut redis_conn = redis_client.get_async_connection().await.unwrap();
+            let redis_conn = redis_client.get_async_connection().await.unwrap();
             let conn_handler = VirtDBConnectionHandler::new(redis_conn, sys_config, exec_log_channel_sender, cache_load_task_channel_sender);
             handle_client(client_stream, mysql_addr_str.clone().parse().unwrap(), conn_handler).await;
         });

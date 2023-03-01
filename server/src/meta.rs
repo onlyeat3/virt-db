@@ -1,6 +1,6 @@
-use std::{thread, time};
+use std::{thread};
 use std::time::Duration;
-use mysql::{Conn, Opts, Pool};
+use mysql::{Pool};
 use mysql::prelude::*;
 use sqlparser::dialect::MySqlDialect;
 use sqlparser::tokenizer::{Token, Tokenizer};

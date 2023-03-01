@@ -145,7 +145,7 @@ pub fn sql_to_pattern(sql: &str) -> Option<String> {
     let ast: Statement = stmts.pop().unwrap();
     let ast = match ast {
         Statement::Query(q) => {
-            let mut q = q.clone() as Box<ast::Query>;
+            let q = q.clone() as Box<ast::Query>;
             let tmp_q = q.clone();
             let result = match q.body {
                 SetExpr::Select(select_expr) => {

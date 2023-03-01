@@ -1,3 +1,4 @@
+#![allow(unused_imports, dead_code)]
 use redis::cluster::{ClusterClient, ClusterConnection};
 use redis::{Client, Commands, Connection, RedisResult};
 

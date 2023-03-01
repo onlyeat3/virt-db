@@ -1,36 +1,20 @@
-use std::{io, thread, time};
-use std::collections::HashMap;
-use std::env::Args;
-use std::fs::OpenOptions;
 use std::future::Future;
-use std::io::{BufWriter, Write};
-use std::net::{Ipv4Addr, SocketAddrV4};
-use std::ops::Deref;
-use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
-use std::thread::sleep;
+use std::sync::{Mutex};
 use std::time::Duration;
 
-use chrono::{DateTime, Local};
+use chrono::{Local};
 use itertools::Itertools;
 use log::{debug, info};
-use metrics_exporter_prometheus::PrometheusBuilder;
-use metrics_util::MetricKindMask;
 use once_cell::sync::Lazy;
-use redis::{Client, Commands, RedisResult};
-use redis::cluster::ClusterClient;
+use redis::{RedisResult};
 use reqwest::{Error, Response};
 use serde::{Deserialize, Serialize};
-use sqlparser::dialect::MySqlDialect;
-use sqlparser::parser::Parser;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
-use tokio::time::Instant;
 
-use crate::{math, sys_config, utils};
 use crate::math::avg::AveragedCollection;
 use crate::sys_config::VirtDBConfig;
 use crate::sys_redis::SysRedisClient;
-use crate::utils::sys_path;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ExecLog {
@@ -70,40 +54,6 @@ impl CacheTaskInfo {
         }
     }
 }
-
-static CACHE_TASK_INFO_LIST_MUTEX: Lazy<Mutex<Vec<CacheTaskInfo>>> = Lazy::new(|| {
-    Mutex::new(Vec::new())
-});
-
-pub fn add_cache_task(cache_task_info: CacheTaskInfo) {
-    match CACHE_TASK_INFO_LIST_MUTEX.lock() {
-        Ok(mut list) => {
-            list.push(cache_task_info);
-        }
-        Err(err) => {
-            warn!("get lock fail.{:?}",err);
-        }
-    };
-}
-
-pub fn get_cache_task_info_list_copy() -> Option<Vec<CacheTaskInfo>> {
-    let locked_result = &CACHE_TASK_INFO_LIST_MUTEX.lock();
-    return match locked_result {
-        Ok(list) => {
-            let cloned_list = list.iter()
-                .map(|ele| {
-                    ele.clone()
-                })
-                .collect();
-            Some(cloned_list)
-        }
-        Err(err) => {
-            warn!("get lock fail.{:?}",err);
-            None
-        }
-    };
-}
-
 
 pub async fn handle_messages<T, F>(mut rx: mpsc::Receiver<T>, sys_config: VirtDBConfig, handler: impl Fn(Vec<T>, VirtDBConfig) -> F)
     where
