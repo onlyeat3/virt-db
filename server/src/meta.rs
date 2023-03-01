@@ -22,7 +22,7 @@ fn set_cache_config_entity_list(entity_list: Vec<CacheConfigEntity>) {
     }
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(Debug)]
 pub struct CacheConfigEntity {
     pub id: i32,
     pub sql_template: String,
