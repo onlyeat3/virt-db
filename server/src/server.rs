@@ -12,8 +12,6 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use chrono::Local;
 
-use futures::Future;
-use futures::stream::Stream;
 use redis::{Client, Commands, Connection, RedisError, RedisResult};
 use redis::cluster::{ClusterClient, ClusterConnection};
 use sqlparser::dialect::MySqlDialect;

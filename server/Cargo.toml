@@ -15,10 +15,10 @@ log4rs = { version = "1.2.0", features = ["all_components"] }
 byteorder = "1.4.3"
 chrono = "0.4.19"
 nom = "7.1.0"
-tokio = { version = "1.17.0", features = ["full"] }
-futures = "0.1"
+tokio = { version = "1.25.0", features = ["full"] }
+#futures = "0.1"
 mysql = "23.0.1"
-sqlx = { version = "0.6", features = [ "runtime-tokio-rustls" , "mysql" ] }
+#sqlx = { version = "0.6", features = [ "runtime-tokio-rustls" , "mysql" ] }
 
 clap = {version="3.2.14",features = [ "derive" ]}
 
@@ -35,5 +35,5 @@ toml = "0.5.10"
 anyhow = "1.0.68"
 sha1 = "0.10.5"
 
-reqwest = { version = "0.11", features = ["json","blocking"] }
+reqwest = { version = "0.11", features = ["json"] }
 itertools = "0.10.5"

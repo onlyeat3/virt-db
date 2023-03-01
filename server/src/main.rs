@@ -1,8 +1,6 @@
 #![allow(unused_imports, dead_code)]
 extern crate byteorder;
 extern crate core;
-extern crate futures;
-// extern crate lazy_static;
 #[macro_use]
 extern crate log;
 extern crate tokio;
