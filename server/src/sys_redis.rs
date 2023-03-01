@@ -28,10 +28,10 @@ impl SysRedisClient {
         Ok(())
     }
 
-    pub fn set_ex(&mut self, key: &str, value: &str,seconds:usize) -> RedisResult<()> {
+    pub fn set_ex(&mut self, key: &str, value: Vec<u8>,seconds:usize) -> RedisResult<()> {
         match self {
-            Self::Single(con) => con.set_ex(key, value,seconds),
-            Self::Cluster(con) => con.set_ex(key, value,seconds),
+            Self::Single(con) => con.set_ex(key, value.as_slice(),seconds),
+            Self::Cluster(con) => con.set_ex(key, value.as_slice(),seconds),
         }?;
         Ok(())
     }

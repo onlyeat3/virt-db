@@ -13,11 +13,14 @@ extern crate tokio;
 extern crate tokio_core;
 
 use std::error::Error;
+use std::io;
+use std::sync::mpsc::channel;
 
 use clap::{AppSettings, Parser};
 use crossbeam::channel::unbounded;
 use log::{error, info};
 use tokio::runtime::Builder;
+use tokio::sync::mpsc;
 
 use crate::server::start;
 use crate::sys_assistant_client::{enable_cache_task_handle_job, enable_metric_writing_job};
@@ -32,6 +35,7 @@ mod math;
 mod protocol;
 mod sys_error;
 mod sys_redis;
+mod serve;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -42,7 +46,8 @@ struct CliArgs {
     config_file: String,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let cli_args = CliArgs::parse();
     sys_log::init_logger()?;
 
@@ -54,13 +59,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sys_config = sys_config_wrapper.unwrap();
     let virt_db_config = sys_config.clone();
 
-    let (exec_log_channel_sender, exec_log_channel_receiver) = unbounded();
-    let (cache_load_task_channel_sender, cache_load_task_channel_receiver) = unbounded();
+    let (exec_log_channel_sender, exec_log_channel_receiver) = mpsc::channel(1000);
+    let (cache_load_task_channel_sender, cache_load_task_channel_receiver) = mpsc::channel(1000);
 
     enable_metric_writing_job(sys_config.clone(), exec_log_channel_receiver);
     meta::enable_meta_refresh_job(sys_config.clone());
     enable_cache_task_handle_job(sys_config.clone(),cache_load_task_channel_receiver);
 
-    start(virt_db_config, exec_log_channel_sender,cache_load_task_channel_sender).unwrap();
+    start(virt_db_config, exec_log_channel_sender,cache_load_task_channel_sender).await.unwrap();
     Ok(())
 }
