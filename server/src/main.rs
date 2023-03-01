@@ -48,8 +48,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let sys_config = sys_config_wrapper.unwrap();
     let virt_db_config = sys_config.clone();
 
-    let (exec_log_channel_sender, exec_log_channel_receiver) = mpsc::channel(1000);
-    let (cache_load_task_channel_sender, cache_load_task_channel_receiver) = mpsc::channel(1000);
+    let (exec_log_channel_sender, exec_log_channel_receiver) = mpsc::channel(10*100_000);
+    let (cache_load_task_channel_sender, cache_load_task_channel_receiver) = mpsc::channel(10*100_000);
 
     enable_metric_writing_job(sys_config.clone(), exec_log_channel_receiver);
     meta::enable_meta_refresh_job(sys_config.clone());
