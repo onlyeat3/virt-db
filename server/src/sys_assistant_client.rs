@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::future::Future;
 use std::sync::{Mutex};
 use std::time::Duration;
@@ -6,7 +7,7 @@ use chrono::{Local};
 use itertools::Itertools;
 use log::{debug, info};
 use once_cell::sync::Lazy;
-use redis::{RedisResult};
+use redis::{AsyncCommands, Client, RedisResult};
 use reqwest::{Error, Response};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -157,22 +158,25 @@ pub fn enable_cache_task_handle_job(sys_config: VirtDBConfig, cache_load_task_ch
         let nodes = nodes.clone();
 
         let mut cache_load_task_channel_receiver = cache_load_task_channel_receiver;
+        // let mut sys_redis_client = SysRedisClient::new(nodes.as_str()).unwrap();
+        let client = Client::open(nodes.as_str()).unwrap();
+        let mut redis_conn = client.clone().get_async_connection().await.unwrap();
 
         loop {
-            let mut sys_redis_client = SysRedisClient::new(nodes.as_str()).unwrap();
             if let Some(cache_task_info) = cache_load_task_channel_receiver.recv().await {
                 let sql = cache_task_info.sql;
                 let redis_key = format!("cache:{:?}", sql);
                 let redis_v = cache_task_info.body;
                 let cache_duration = cache_task_info.duration;
+                let cache_duration = max(60,cache_duration);
                 debug!("[cache_task_handle_job]sql:{:?},redis_key:{:?},cache_duration:{:?}",sql.clone(),redis_key,cache_duration);
 
-                let rv: RedisResult<()> = sys_redis_client
+                let rv: RedisResult<()> = redis_conn
                     .set_ex(
                         &*redis_key.clone(),
                         redis_v,
                         cache_duration as usize,
-                    );
+                    ).await;
                 if let Err(err) = rv {
                     warn!("redis set cmd fail. for sql:{:?},err:{:?}",sql,err);
                     // match err.code() {
