@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 use std::error::Error;
-use std::fs;
+use std::{env, fs};
 use log::{debug, error, info, trace};
 use serde_derive::Deserialize;
 use std::path::{Path, PathBuf};
@@ -68,7 +68,8 @@ pub struct MetaDbConfig {
 }
 
 pub fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Error> {
-    let mut base_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let current_exec_path = env::current_exe().expect("Get Workdir fail");
+    let mut base_dir = current_exec_path.parent().expect("Get Workdir fail.").to_path_buf();
     let real_config_file = if Path::new(config_file).exists() {
         config_file
     } else {
