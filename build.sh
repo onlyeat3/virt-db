@@ -17,7 +17,7 @@ EOF
 
 build_admin_ui(){
   # build admin-ui
-  rm -rf tmp
+#  rm -rf tmp
   git clone https://github.com/onlyeat3/virt-db-admin-ui tmp
   cd tmp
   git checkout  ${VERSION}
@@ -26,7 +26,7 @@ build_admin_ui(){
   cd ..
   rm -rf ./admin/dist
   mv tmp/dist ./admin
-  rm -rf tmp
+#  rm -rf tmp
 }
 
 build_backend(){
