@@ -33,7 +33,7 @@ build_backend(){
   # build docker image
   docker run -v cargo-cache:/root/.cargo/registry -v "/$(pwd):/volume" --rm -it clux/muslrust cargo build --release
   docker build -t $DOCKER_USERNAME/virt-db-server:${VERSION} -f server/Dockerfile .
-  docker build --build-arg=${VERSION} -t $DOCKER_USERNAME/virt-db-admin:${VERSION} -f admin/Dockerfile .
+  docker build -t $DOCKER_USERNAME/virt-db-admin:${VERSION} -f admin/Dockerfile .
 }
 
 main() {
