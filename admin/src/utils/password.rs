@@ -1,3 +1,4 @@
+use log::info;
 use rand::distributions::Alphanumeric;
 use rand::{Rng, thread_rng};
 
@@ -15,5 +16,5 @@ pub fn test_encode(){
         .map(char::from)
         .collect();
     let encoded_password_result = encode("admin123".to_string(),salt.clone());
-    println!("salt:{:?},password:{:?}",salt,encoded_password_result);
+    info!("salt:{:?},password:{:?}",salt,encoded_password_result);
 }
