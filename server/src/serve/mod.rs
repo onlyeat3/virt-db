@@ -1,5 +1,6 @@
 // use byteorder::{LittleEndian, ReadBytesExt as BorderReadBytesExt};
 use std::net::SocketAddr;
+use std::rc::Rc;
 use std::sync::Arc;
 use chrono::{DateTime, Local};
 // use mysql_common::proto::codec::CompDecoder::Packet;
@@ -10,7 +11,7 @@ use sqlparser::dialect::MySqlDialect;
 use tokio::io as async_io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener as AsyncTcpListener, TcpStream as AsyncTcpStream};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, MutexGuard};
 use tokio::sync::mpsc::Sender;
 use crate::meta::CacheConfigEntity;
 // use crate::protocol::{Packet, PacketType};
@@ -35,6 +36,8 @@ pub struct ProxyContext {
     pub redis_duration: i64,
     pub from_cache: bool,
     pub cache_duration: i32,
+    pub total_duration: i64,
+    pub mysql_duration: i64,
 }
 
 pub async fn handle_client(
@@ -84,9 +87,12 @@ pub async fn handle_client(
                         redis_duration: 0,
                         from_cache: false,
                         cache_duration: 0,
+                        total_duration: 0,
+                        mysql_duration: 0,
                     };
                     let packet = Packet::new(buf.to_vec());
                     if let Err(_) = packet.packet_type() {
+                        ctx.mysql_exec_start_time = Some(Local::now());
                         ctx_sender.send(ctx).await.unwrap();
                         remote_writer.write_all(&buf[..n]).await?;
                         continue;
@@ -96,11 +102,17 @@ pub async fn handle_client(
                     let sql_result = String::from_utf8(bytes.to_vec());
                     if let Ok(sql) = sql_result {
                         ctx.sql = Some(sql.clone());
+                        // info!("current sql:{:?}",ctx.sql);
                     }
                     let mut conn_handler = conn_handler_wrapper_a.lock().await;
                     let action = conn_handler.handle_request(&mut ctx, packet_type).await;
+
                     let skip = match action {
-                        Action::FORWARD => false,
+                        Action::FORWARD => {
+                            ctx.mysql_exec_start_time = Some(Local::now());
+                            ctx_sender.send(ctx).await.expect("send ctx fail");
+                            false
+                        }
                         Action::DROP => true,
                         Action::RESPONSED(mut bytes) => {
                             let mut client_writer = client_writer_lock_a.lock().await;
@@ -113,10 +125,10 @@ pub async fn handle_client(
                             true
                         }
                     };
+
                     if skip {
                         continue;
                     }
-                    ctx_sender.send(ctx).await.expect("send ctx fail");
 
                     // println!("Received from client: {:?},type:{:#?}", String::from_utf8_lossy(&*buf[..n].to_vec()), &buf[0]);
                     remote_writer.write_all(&buf[..n]).await?;
@@ -133,7 +145,7 @@ pub async fn handle_client(
     let remote_to_client = async move {
         let mut buf = [0u8; 1024];
         let mut cached_buf = vec![];
-        let mut cached_ctx: Option<ProxyContext> = None;
+        let mut cached_ctx: Option<Arc<Mutex<ProxyContext>>> = None;
         let client_writer_lock = client_writer_lock_b;
         let conn_handler_wrapper_b = conn_handler_wrapper_b;
         loop {
@@ -143,30 +155,34 @@ pub async fn handle_client(
                         return Ok(());
                     }
 
-                    // println!("Received from remote: {:X?}", String::from_utf8_lossy(&buf[..n]).to_string());
+                    // info!("Received from remote: {:X?}", String::from_utf8_lossy(&buf[..n]).to_string());
 
-                    if let Ok(new_ctx) = ctx_receiver.try_recv() {
+                    if let Ok(current_ctx) = ctx_receiver.try_recv() {
                         //清理上次保存的记录
-                        // println!("recv new ctx:{:?},old:{:?}", new_ctx, cached_ctx.clone());
-                        // println!("update cache for {:?}",cached_ctx);
-                        if let Some(ctx) = cached_ctx.clone() {
+                        // info!("recv new ctx:{:?},mysql_start_time:{:?},old exists:{:?}", current_ctx.sql,current_ctx.mysql_exec_start_time, cached_ctx.is_some());
+                        // info!("update cache for {:?}",cached_ctx);
+                        if let Some(old_ctx) = cached_ctx.clone() {
                             let mut conn_handler = conn_handler_wrapper_b.lock().await;
-                            conn_handler.handle_remote_response_finished(ctx, &cached_buf).await;
+                            conn_handler.handle_remote_response_finished(old_ctx, &cached_buf).await;
                             cached_buf.clear();
                         }
 
-                        cached_ctx = Some(new_ctx);
+                        cached_ctx = Some(Arc::new(Mutex::new(current_ctx)));
                     }
 
-                    if let Some(new_ctx) = cached_ctx.clone() {
-                        if new_ctx.should_update_cache {
-                            if let Some(_) = new_ctx.sql.clone() {
-                                if new_ctx.should_update_cache {
+                    if let Some(mut old_ctx) = cached_ctx.clone() {
+                        let old_ctx = old_ctx.lock().await;
+                        if old_ctx.should_update_cache {
+                            if let Some(_) = old_ctx.sql.clone() {
+                                if old_ctx.should_update_cache {
                                     cached_buf.extend_from_slice(&buf[..n]);
                                     // println!("cache response local");
                                 }
                             }
                         }
+                        //handle partial response
+                        let mut conn_handler = conn_handler_wrapper_b.lock().await;
+                        conn_handler.handle_response(old_ctx);
                     }
 
                     let error_extra_msg = format!(
@@ -354,15 +370,33 @@ impl VirtDBConnectionHandler {
         result_action
     }
 
-    pub fn handle_response(&mut self) {}
+    //处理大数据包拆分的单个数据包
+    pub fn handle_response(&mut self, mut ctx: MutexGuard<ProxyContext>) {
+        // info!("mysql_exec_start_time:{:?}",ctx.mysql_exec_start_time);
+        ctx.total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
 
-    pub async fn handle_remote_response_finished(&mut self, ctx: ProxyContext, full_response: &Vec<u8>) {
+        // info!("fn_start_time:{:?},total_duration:{:?}",ctx.fn_start_time,ctx.total_duration);
+        if let Some(mysql_exec_start_time) = ctx.mysql_exec_start_time {
+            let mysql_duration = (Local::now() - mysql_exec_start_time).num_milliseconds();
+            ctx.mysql_duration = mysql_duration;
+        }
+    }
+
+    pub async fn handle_remote_response_finished(&mut self, ctx: Arc<Mutex<ProxyContext>>, full_response: &Vec<u8>) {
+        let ctx = ctx.lock().await;
+        trace!("handle_remote_response_finished,sql:{:?},total_duration:{:?},mysql_duration:{:?},redis_duration:{:?},start_time:{:?}",ctx.sql,ctx.total_duration,ctx.mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time);
         if let None = ctx.sql {
             return;
         }
-        let mysql_duration = (Local::now() - ctx.mysql_exec_start_time.unwrap_or_default()).num_milliseconds();
+        if let None = ctx.mysql_exec_start_time {
+            return;
+        }
+        let mysql_duration = ctx.mysql_duration;
+        let total_duration = ctx.total_duration;
 
-        let sql = ctx.sql.unwrap();
+        info!("sql:{:?},mysql_duration:{:?},redis_duration:{:?},mysql_exec_start_time:{:?},total_duration:{:?}",ctx.sql.clone(),mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time,total_duration);
+
+        let sql = ctx.sql.clone().unwrap();
         if ctx.should_update_cache {
             // let cache_key = format!("cache:\"{}\"", sql.clone());
             // let cache_v = full_response.as_slice();
@@ -382,7 +416,6 @@ impl VirtDBConnectionHandler {
             }
         }
 
-        let total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
         //只记录select
         if let Some(sql_pattern) = sql_to_pattern(sql.clone().as_str()) {
             let exec_log = ExecLog {
