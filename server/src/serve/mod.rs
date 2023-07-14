@@ -51,7 +51,7 @@ pub async fn handle_client(
     let mut remote_stream = match AsyncTcpStream::connect(remote_addr).await {
         Ok(stream) => stream,
         Err(e) => {
-            println!("Failed to connect to {}: {}", remote_addr, e);
+            info!("Failed to connect to {}: {}", remote_addr, e);
             return;
         }
     };
@@ -104,7 +104,7 @@ pub async fn handle_client(
                     let sql_result = String::from_utf8(bytes.to_vec());
                     if let Ok(sql) = sql_result {
                         ctx.sql = Some(sql.clone());
-                        // info!("current sql:{:?}",ctx.sql);
+                        // trace!("current sql:{:?}",ctx.sql);
                     }
                     let mut conn_handler = conn_handler_wrapper_a.lock().await;
                     let action = conn_handler.handle_request(&mut ctx, packet_type).await;
@@ -122,7 +122,7 @@ pub async fn handle_client(
                             // println!("sql:{:?},cache_v:{:X?}", sql.clone(), String::from_utf8_lossy(&*cache_v.clone()));
                             let r = client_writer.write_all(bytes.as_mut_slice()).await;
                             if let Err(err) = r {
-                                println!("write to client fail.err:{:?}", err);
+                                info!("write to client fail.err:{:?}", err);
                             }
                             true
                         }
@@ -137,7 +137,7 @@ pub async fn handle_client(
                     r_buf.clear();
                 }
                 Err(e) => {
-                    println!("client_to_remote:{:#?}", e);
+                    info!("client_to_remote:{:#?}", e);
                     return Err(e);
                 }
             }
@@ -204,7 +204,7 @@ pub async fn handle_client(
                     r_buf.clear();
                 }
                 Err(e) => {
-                    println!("remote_to_client error:{:#?}", e);
+                    info!("remote_to_client error:{:#?}", e);
                     return Err(e);
                 }
             }
@@ -214,12 +214,12 @@ pub async fn handle_client(
     tokio::select! {
         result = client_to_remote => {
             if let Err(e) = result {
-                eprintln!("Error transferring client to remote: {}", e);
+                error!("Error transferring client to remote: {}", e);
             }
         }
         result = remote_to_client => {
             if let Err(e) = result {
-                eprintln!("Error transferring remote to client: {}", e);
+                error!("Error transferring remote to client: {}", e);
             }
         }
     }
@@ -248,19 +248,19 @@ impl VirtDBConnectionHandler {
     }
 
     pub async fn handle_request(&mut self, mut ctx: &mut ProxyContext, packet_type: PacketType) -> Action {
-        // println!("packet_type:{:?},sql:{:?}", packet_type.clone(), sql.clone());
         ctx.fn_start_time = Instant::now();
 
         if let None = ctx.sql {
             return Action::FORWARD;
         }
         let sql = ctx.sql.clone().unwrap();
+        let sql = utils::sys_sql::remove_comments(sql);
+        // info!("sql:{:?}", sql.clone());
         let result_action = match packet_type {
             PacketType::ComQuery => {
                 if !sql.clone().to_uppercase().starts_with("SELECT") {
                     return Action::FORWARD;
                 }
-                // println!("[match]sql:{:?}", sql);
                 let tmp_sql = sql.clone();
                 if tmp_sql.to_uppercase().contains("\0\0\0\u{3}") {
                     // println!("sqls:{:?}", tmp_sql);
@@ -334,7 +334,7 @@ impl VirtDBConnectionHandler {
                 Action::RESPONSED(cache_v)
             }
             PacketType::ComStmtExecute => {
-                println!("stmt,sql:{:?}", sql);
+                info!("stmt,sql:{:?}", sql);
                 return Action::FORWARD;
             }
             PacketType::ComQuit => {

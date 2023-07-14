@@ -302,3 +302,26 @@ pub fn test_sql_to_pattern() {
     let pattern = sql_to_pattern(sql);
     println!("ast:{:?}", pattern);
 }
+
+pub fn remove_comments(query: String) -> String {
+    let mut result = String::new();
+    let mut skip = false;
+
+    let mut chars = query.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '/' && chars.peek() == Some(&'*') {
+            // 如果遇到 '/*'，则跳过直到找到 '*/'
+            skip = true;
+            chars.next(); // 跳过下一个字符 '*'
+        } else if skip && c == '*' && chars.peek() == Some(&'/') {
+            // 如果找到 '*/'，则结束跳过状态
+            skip = false;
+            chars.next(); // 跳过下一个字符 '/'
+        } else if !skip {
+            result.push(c);
+        }
+    }
+
+    String::from(result.trim())
+}
