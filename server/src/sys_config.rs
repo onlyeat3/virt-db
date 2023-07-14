@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 use std::error::Error;
-use std::fs;
+use std::{env, fs};
 use log::{debug, error, info, trace};
 use serde_derive::Deserialize;
 use std::path::{Path, PathBuf};
@@ -68,15 +68,17 @@ pub struct MetaDbConfig {
 }
 
 pub fn parse_config(config_file: &str) -> Result<VirtDBConfig, std::io::Error> {
-    let mut base_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let current_exec_path = env::current_exe().expect("Get Workdir fail");
+    let mut base_dir = current_exec_path.parent().expect("Get Workdir fail.").to_path_buf();
     let real_config_file = if Path::new(config_file).exists() {
+        info!("Read config from cli config [{:?}]",config_file);
         config_file
     } else {
         base_dir.push("config.toml");
         base_dir.to_str().unwrap()
     };
     let real_config_file_path = Path::new(real_config_file);
-    info!("Try read config from file:{:?}", real_config_file_path);
+    info!("Try read config from file:{:?},argument `config_file`:{:?}", real_config_file_path,config_file);
     if !real_config_file_path.exists() {
         error!(
             "Config file:{:?} Not Exists",
