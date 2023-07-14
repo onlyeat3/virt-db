@@ -10,7 +10,7 @@ use redis::aio::{Connection};
 use redis::{AsyncCommands, RedisResult};
 use sqlparser::dialect::MySqlDialect;
 use tokio::io as async_io;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener as AsyncTcpListener, TcpStream as AsyncTcpStream};
 use tokio::sync::{mpsc, Mutex, MutexGuard};
 use tokio::sync::mpsc::Sender;
@@ -21,6 +21,8 @@ use crate::sys_config::VirtDBConfig;
 use crate::{meta, utils};
 use crate::protocol::{Packet, PacketType};
 use crate::utils::sys_sql::sql_to_pattern;
+
+const BUFFER_SIZE: usize = 8 * 1024;
 
 pub enum Action {
     FORWARD,
@@ -68,14 +70,11 @@ pub async fn handle_client(
     let conn_handler_wrapper_b = conn_handler.clone();
 
     let client_to_remote = async move {
-        let mut buf = [0u8; 8*1024];
+        let mut buf = [0; BUFFER_SIZE];
+        let mut r_buf = ReadBuf::new(&mut buf);
         let conn_handler_wrapper_a = conn_handler_wrapper_a;
         loop {
-            // println!();
-            // println!("loop");
-            let read_size = client_reader.read(&mut buf).await;
-            // println!("read size:{:?}", &read_size);
-            match read_size {
+            match client_reader.read_buf(&mut r_buf).await {
                 Ok(n) => {
                     if n == 0 {
                         return Ok(());
@@ -91,15 +90,17 @@ pub async fn handle_client(
                         total_duration: 0,
                         mysql_duration: 0,
                     };
-                    let packet = Packet::new(buf.to_vec());
+                    let data = r_buf.filled();
+
+                    let packet = Packet::new(data.to_vec());
                     if let Err(_) = packet.packet_type() {
                         ctx.mysql_exec_start_time = Some(Instant::now());
                         ctx_sender.send(ctx).await.unwrap();
-                        remote_writer.write_all(&buf[..n]).await?;
+                        remote_writer.write_all(data).await?;
                         continue;
                     }
                     let packet_type = packet.packet_type().unwrap();
-                    let bytes = &buf[5..n];
+                    let bytes = &data[5..n];
                     let sql_result = String::from_utf8(bytes.to_vec());
                     if let Ok(sql) = sql_result {
                         ctx.sql = Some(sql.clone());
@@ -132,7 +133,8 @@ pub async fn handle_client(
                     }
 
                     // println!("Received from client: {:?},type:{:#?}", String::from_utf8_lossy(&*buf[..n].to_vec()), &buf[0]);
-                    remote_writer.write_all(&buf[..n]).await?;
+                    remote_writer.write_all(data).await?;
+                    r_buf.clear();
                 }
                 Err(e) => {
                     println!("client_to_remote:{:#?}", e);
@@ -144,17 +146,19 @@ pub async fn handle_client(
 
     let client_writer_lock_b = client_writer_lock.clone();
     let remote_to_client = async move {
-        let mut buf = [0u8; 8*1024];
+        let mut buf = [0; BUFFER_SIZE];
+        let mut r_buf = ReadBuf::new(&mut buf);
         let mut cached_buf = vec![];
         let mut cached_ctx: Option<Arc<Mutex<ProxyContext>>> = None;
         let client_writer_lock = client_writer_lock_b;
         let conn_handler_wrapper_b = conn_handler_wrapper_b;
         loop {
-            match remote_reader.read(&mut buf).await {
+            match remote_reader.read_buf(&mut r_buf).await {
                 Ok(n) => {
                     if n == 0 {
                         return Ok(());
                     }
+                    let data = r_buf.filled();
 
                     // info!("Received from remote: {:X?}", String::from_utf8_lossy(&buf[..n]).to_string());
 
@@ -176,7 +180,7 @@ pub async fn handle_client(
                         if old_ctx.should_update_cache {
                             if let Some(_) = old_ctx.sql.clone() {
                                 if old_ctx.should_update_cache {
-                                    cached_buf.extend_from_slice(&buf[..n]);
+                                    cached_buf.extend_from_slice(data);
                                     // println!("cache response local");
                                 }
                             }
@@ -189,13 +193,15 @@ pub async fn handle_client(
                     let error_extra_msg = format!(
                         "client_writer write_all() fail.remote write to client.ctx:{:?},v:{:?}",
                         cached_ctx.clone(),
-                        String::from_utf8_lossy(&buf[..n])
+                        String::from_utf8_lossy(data)
                     );
                     let mut client_writer = client_writer_lock.lock().await;
                     client_writer
-                        .write_all(&buf[..n])
+                        .write_all(data)
                         .await
                         .expect(&*error_extra_msg);
+
+                    r_buf.clear();
                 }
                 Err(e) => {
                     println!("remote_to_client error:{:#?}", e);
@@ -368,7 +374,7 @@ impl VirtDBConnectionHandler {
         let mysql_duration = ctx.mysql_duration;
         let total_duration = ctx.total_duration;
 
-        info!("sql:{:?},mysql_duration:{:?},redis_duration:{:?},mysql_exec_start_time:{:?},total_duration:{:?}",ctx.sql.clone(),mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time,total_duration);
+        // info!("sql:{:?},mysql_duration:{:?},redis_duration:{:?},mysql_exec_start_time:{:?},total_duration:{:?}",ctx.sql.clone(),mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time,total_duration);
 
         let sql = ctx.sql.clone().unwrap();
         if ctx.should_update_cache {
