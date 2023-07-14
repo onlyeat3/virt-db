@@ -2,6 +2,7 @@
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Instant;
 use chrono::{DateTime, Local};
 // use mysql_common::proto::codec::CompDecoder::Packet;
 
@@ -31,8 +32,8 @@ pub enum Action {
 pub struct ProxyContext {
     pub sql: Option<String>,
     pub should_update_cache: bool,
-    pub fn_start_time: DateTime<Local>,
-    pub mysql_exec_start_time: Option<DateTime<Local>>,
+    pub fn_start_time: Instant,
+    pub mysql_exec_start_time: Option<Instant>,
     pub redis_duration: i64,
     pub from_cache: bool,
     pub cache_duration: i32,
@@ -67,7 +68,7 @@ pub async fn handle_client(
     let conn_handler_wrapper_b = conn_handler.clone();
 
     let client_to_remote = async move {
-        let mut buf = [0u8; 1024];
+        let mut buf = [0u8; 8*1024];
         let conn_handler_wrapper_a = conn_handler_wrapper_a;
         loop {
             // println!();
@@ -82,7 +83,7 @@ pub async fn handle_client(
                     let mut ctx = ProxyContext {
                         sql: None,
                         should_update_cache: false,
-                        fn_start_time: Local::now(),
+                        fn_start_time: Instant::now(),
                         mysql_exec_start_time: None,
                         redis_duration: 0,
                         from_cache: false,
@@ -92,7 +93,7 @@ pub async fn handle_client(
                     };
                     let packet = Packet::new(buf.to_vec());
                     if let Err(_) = packet.packet_type() {
-                        ctx.mysql_exec_start_time = Some(Local::now());
+                        ctx.mysql_exec_start_time = Some(Instant::now());
                         ctx_sender.send(ctx).await.unwrap();
                         remote_writer.write_all(&buf[..n]).await?;
                         continue;
@@ -109,7 +110,7 @@ pub async fn handle_client(
 
                     let skip = match action {
                         Action::FORWARD => {
-                            ctx.mysql_exec_start_time = Some(Local::now());
+                            ctx.mysql_exec_start_time = Some(Instant::now());
                             ctx_sender.send(ctx).await.expect("send ctx fail");
                             false
                         }
@@ -143,7 +144,7 @@ pub async fn handle_client(
 
     let client_writer_lock_b = client_writer_lock.clone();
     let remote_to_client = async move {
-        let mut buf = [0u8; 1024];
+        let mut buf = [0u8; 8*1024];
         let mut cached_buf = vec![];
         let mut cached_ctx: Option<Arc<Mutex<ProxyContext>>> = None;
         let client_writer_lock = client_writer_lock_b;
@@ -218,33 +219,6 @@ pub async fn handle_client(
     }
 }
 
-// #[tokio::main]
-// async fn main() -> async_io::Result<()> {
-//     let listener = AsyncTcpListener::bind("0.0.0.0:10101").await?;
-//
-//     println!("Listening on {}", listener.local_addr()?);
-//     let redis_client = redis::Client::open("redis://127.0.0.1").unwrap();
-//
-//     loop {
-//         let redis_client = redis_client.clone();
-//         let (client_stream, client_addr) = listener.accept().await?;
-//
-//         println!("Accepted connection from {}", client_addr);
-//         tokio::spawn(async move {
-//             // handle_client(client_stream, "172.22.240.1:3306".parse().unwrap(), conn).await;
-//             let mut redis_conn = redis_client.clone().get_async_connection().await.unwrap();
-//             let conn_handler = VirtDBConnectionHandler::new(redis_conn);
-//             handle_client(
-//                 client_stream,
-//                 "127.0.0.1:3306".parse().unwrap(),
-//                 conn_handler,
-//             )
-//                 .await;
-//         });
-//     }
-// }
-
-
 pub struct VirtDBConnectionHandler {
     pub redis_conn: Connection,
     dialect: MySqlDialect,
@@ -269,7 +243,7 @@ impl VirtDBConnectionHandler {
 
     pub async fn handle_request(&mut self, mut ctx: &mut ProxyContext, packet_type: PacketType) -> Action {
         // println!("packet_type:{:?},sql:{:?}", packet_type.clone(), sql.clone());
-        ctx.fn_start_time = Local::now();
+        ctx.fn_start_time = Instant::now();
 
         if let None = ctx.sql {
             return Action::FORWARD;
@@ -311,20 +285,20 @@ impl VirtDBConnectionHandler {
                     return Action::FORWARD;
                 }
 
-                let redis_get_start_time = Local::now();
+                let redis_get_start_time = Instant::now();
                 let cache_key = format!("cache:\"{}\"", sql);
                 let cache_exists_check_result: RedisResult<bool> = self.redis_conn.exists(cache_key.clone()).await;
                 if let Err(_) = cache_exists_check_result {
                     // println!("continue2");
                     ctx.cache_duration = cache_config_entity_option.unwrap().duration;
-                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+                    ctx.redis_duration = (Instant::now() - redis_get_start_time).as_millis() as i64;
                     return Action::FORWARD;
                 }
                 let is_exists = cache_exists_check_result.unwrap();
                 if !is_exists {
                     ctx.should_update_cache = true;
                     ctx.cache_duration = cache_config_entity_option.unwrap().duration;
-                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+                    ctx.redis_duration = (Instant::now() - redis_get_start_time).as_millis() as i64;
                     // println!("continue3");
                     return Action::FORWARD;
                 }
@@ -334,7 +308,7 @@ impl VirtDBConnectionHandler {
                 if let Err(_) = cache_v_result {
                     // println!("continue4");
                     ctx.cache_duration = cache_config_entity_option.unwrap().duration;
-                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+                    ctx.redis_duration = (Instant::now() - redis_get_start_time).as_millis() as i64;
                     return Action::FORWARD;
                 }
 
@@ -343,12 +317,12 @@ impl VirtDBConnectionHandler {
                 if cache_v.len() < 1 {
                     // println!("continue5");
                     ctx.cache_duration = cache_config_entity_option.unwrap().duration;
-                    ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+                    ctx.redis_duration = (Instant::now() - redis_get_start_time).as_millis() as i64;
                     return Action::FORWARD;
                 }
 
                 trace!("[handle_request]redis_v:{:?}", cache_v);
-                ctx.redis_duration = (Local::now() - redis_get_start_time).num_milliseconds();
+                ctx.redis_duration = (Instant::now() - redis_get_start_time).as_millis() as i64;
                 ctx.from_cache = true;
 
                 Action::RESPONSED(cache_v)
@@ -365,7 +339,7 @@ impl VirtDBConnectionHandler {
                 return Action::FORWARD;
             }
         };
-        let mysql_exec_start_time = Local::now();
+        let mysql_exec_start_time = Instant::now();
         ctx.mysql_exec_start_time = Some(mysql_exec_start_time);
         result_action
     }
@@ -373,11 +347,11 @@ impl VirtDBConnectionHandler {
     //处理大数据包拆分的单个数据包
     pub fn handle_response(&mut self, mut ctx: MutexGuard<ProxyContext>) {
         // info!("mysql_exec_start_time:{:?}",ctx.mysql_exec_start_time);
-        ctx.total_duration = (Local::now() - ctx.fn_start_time).num_milliseconds();
+        ctx.total_duration = (Instant::now() - ctx.fn_start_time).as_millis() as i64;
 
         // info!("fn_start_time:{:?},total_duration:{:?}",ctx.fn_start_time,ctx.total_duration);
         if let Some(mysql_exec_start_time) = ctx.mysql_exec_start_time {
-            let mysql_duration = (Local::now() - mysql_exec_start_time).num_milliseconds();
+            let mysql_duration = (Instant::now() - mysql_exec_start_time).as_millis() as i64;
             ctx.mysql_duration = mysql_duration;
         }
     }
