@@ -1,5 +1,5 @@
 #![allow(unused_imports, dead_code)]
-use redis::cluster::{ClusterClient, ClusterConnection};
+use redis::cluster::{ClusterClient, ClusterClientBuilder, ClusterConnection};
 use redis::{Client, Commands, Connection, RedisResult};
 
 pub enum SysRedisClient {
@@ -15,7 +15,8 @@ impl SysRedisClient {
             let con = client.get_connection()?;
             Ok(Self::Single(con))
         } else {
-            let client = ClusterClient::open(addrs)?;
+            let client = ClusterClientBuilder::new(addrs)
+                .build()?;
             let con = client.get_connection()?;
             Ok(Self::Cluster(con))
         }

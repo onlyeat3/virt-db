@@ -180,7 +180,7 @@ pub async fn handle_client(
                         // info!("recv new ctx:{:?},mysql_start_time:{:?},old exists:{:?}", current_ctx.sql,current_ctx.mysql_exec_start_time, cached_ctx.is_some());
                         if let Some(old_ctx) = cached_ctx.clone() {
                             let mut conn_handler = conn_handler_wrapper_b.lock().await;
-                            let mut old_ctx = old_ctx.lock().await;
+                            let old_ctx = old_ctx.lock().await;
                             let old_ctx = old_ctx.deref();
                             conn_handler.handle_remote_response_finished(old_ctx.clone(), &cached_buf).await;
                             cached_buf.clear();
@@ -191,7 +191,7 @@ pub async fn handle_client(
 
                     cached_buf.extend_from_slice(data);
 
-                    if let Some(mut old_ctx) = cached_ctx.clone() {
+                    if let Some(old_ctx) = cached_ctx.clone() {
                         let mut old_ctx = old_ctx.lock().await;
                         // if old_ctx.should_update_cache {
                         //     if let Some(_) = old_ctx.sql.clone() {
@@ -265,7 +265,7 @@ impl VirtDBConnectionHandler {
         }
     }
 
-    pub async fn handle_request(&mut self, mut ctx: &mut ProxyContext, packet_type: PacketType) -> Action {
+    pub async fn handle_request(&mut self, ctx: &mut ProxyContext, packet_type: PacketType) -> Action {
         ctx.fn_start_time = Instant::now();
 
         if let None = ctx.sql {
@@ -368,7 +368,7 @@ impl VirtDBConnectionHandler {
     }
 
     //处理大数据包拆分的单个数据包
-    pub fn handle_response(&mut self, mut ctx: &mut ProxyContext) {
+    pub fn handle_response(&mut self, ctx: &mut ProxyContext) {
         // info!("mysql_exec_start_time:{:?}",ctx.mysql_exec_start_time);
         ctx.total_duration = (Instant::now() - ctx.fn_start_time).as_millis() as i64;
 
