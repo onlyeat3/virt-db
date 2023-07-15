@@ -60,7 +60,8 @@ pub fn is_pattern_match(tokens1: &Vec<Token>, sql2: &str, dialect: &MySqlDialect
             };
         })
         .collect();
-    debug!("tokens1:{:?}\ntokens2:{:?}\ntokens1.len:{:?},tokens2.len:{:?}", tokens1, tokens2, tokens1.len(), tokens2.len());
+    // debug!("tokens1:{:?}\ntokens2:{:?}\ntokens1.len:{:?},tokens2.len:{:?}", tokens1, tokens2, tokens1.len(), tokens2.len());
+    debug!("sql:{:?},pattern:{:?}",sql2,tokens1);
     if tokens1.len() != tokens2.len() {
         return false;
     }
@@ -68,7 +69,7 @@ pub fn is_pattern_match(tokens1: &Vec<Token>, sql2: &str, dialect: &MySqlDialect
     for index in 0..tokens1.len() {
         let a = &tokens1[index];
         let b = &tokens2[index];
-        debug!("sql match token pair. a:{:?},b:{:?}", a, b);
+        trace!("sql match token pair. a:{:?},b:{:?}", a, b);
         let is_same = match (a, b) {
             (Token::Word(v_a), Token::Word(v_b)) => {
                 v_a.value == v_b.value

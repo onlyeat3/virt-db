@@ -128,6 +128,7 @@ pub async fn handle_metrics(exec_log_list: Vec<ExecLog>, sys_config: VirtDBConfi
                 let data_wrapper_result = response.json::<DataWrapper<String>>().await;
                 match data_wrapper_result {
                     Ok(data_wrapper) => {
+                        debug!("handle_metrics. response:{:?}",data_wrapper);
                         if !data_wrapper.success {
                             warn!("register vt_node fail. response:{:?}",data_wrapper);
                         }
