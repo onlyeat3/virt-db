@@ -1,5 +1,6 @@
 // use byteorder::{LittleEndian, ReadBytesExt as BorderReadBytesExt};
 use std::net::SocketAddr;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -94,7 +95,7 @@ pub async fn handle_client(
                     };
                     let data = r_buf.filled();
 
-                    info!("data:{:?}",String::from_utf8_lossy(data));
+                    // info!("data:{:?}",String::from_utf8_lossy(data));
                     let packet = Packet::new(data.to_vec());
                     if let Err(_) = packet.packet_type() {
                         remote_writer.write_all(data).await?;
@@ -117,15 +118,24 @@ pub async fn handle_client(
                             ctx_sender.send(ctx).await.expect("send ctx fail");
                             false
                         }
-                        Action::DROP => true,
+                        Action::DROP => {
+                            conn_handler.handle_response(&mut ctx);
+                            conn_handler.handle_remote_response_finished(ctx.clone(),&vec![]).await;
+                            true
+                        },
                         Action::RESPONSED(mut bytes) => {
+                            let data = bytes.as_mut_slice();
                             let mut client_writer = client_writer_lock_a.lock().await;
                             // println!("sql:{:?},value from cache:true", sql.clone());
                             // println!("sql:{:?},cache_v:{:X?}", sql.clone(), String::from_utf8_lossy(&*cache_v.clone()));
-                            let r = client_writer.write_all(bytes.as_mut_slice()).await;
+                            let r = client_writer.write_all(data).await;
                             if let Err(err) = r {
                                 info!("write to client fail.err:{:?}", err);
                             }
+
+                            conn_handler.handle_response(&mut ctx);
+                            conn_handler.handle_remote_response_finished(ctx.clone(),&data.to_vec()).await;
+
                             true
                         }
                     };
@@ -170,7 +180,9 @@ pub async fn handle_client(
                         // info!("recv new ctx:{:?},mysql_start_time:{:?},old exists:{:?}", current_ctx.sql,current_ctx.mysql_exec_start_time, cached_ctx.is_some());
                         if let Some(old_ctx) = cached_ctx.clone() {
                             let mut conn_handler = conn_handler_wrapper_b.lock().await;
-                            conn_handler.handle_remote_response_finished(old_ctx, &cached_buf).await;
+                            let mut old_ctx = old_ctx.lock().await;
+                            let old_ctx = old_ctx.deref();
+                            conn_handler.handle_remote_response_finished(old_ctx.clone(), &cached_buf).await;
                             cached_buf.clear();
                         }
                         // info!("new ctx:{:?}", current_ctx);
@@ -180,7 +192,7 @@ pub async fn handle_client(
                     cached_buf.extend_from_slice(data);
 
                     if let Some(mut old_ctx) = cached_ctx.clone() {
-                        let old_ctx = old_ctx.lock().await;
+                        let mut old_ctx = old_ctx.lock().await;
                         // if old_ctx.should_update_cache {
                         //     if let Some(_) = old_ctx.sql.clone() {
                         //         if old_ctx.should_update_cache {
@@ -191,7 +203,8 @@ pub async fn handle_client(
                         // }
                         //handle partial response
                         let mut conn_handler = conn_handler_wrapper_b.lock().await;
-                        conn_handler.handle_response(old_ctx);
+                        let tmp_ctx = old_ctx.deref_mut();
+                        conn_handler.handle_response(tmp_ctx);
                     }
 
 
@@ -260,7 +273,7 @@ impl VirtDBConnectionHandler {
         }
         let origin_sql = ctx.sql.clone().unwrap();
         let sql = utils::sys_sql::remove_comments(origin_sql.clone());
-        info!("origin_sql:{:?},sql:{:?}",origin_sql, sql.clone());
+        // info!("origin_sql:{:?},sql:{:?}",origin_sql, sql.clone());
         let result_action = match packet_type {
             PacketType::ComQuery => {
                 if !sql.clone().to_uppercase().starts_with("SELECT") {
@@ -355,7 +368,7 @@ impl VirtDBConnectionHandler {
     }
 
     //处理大数据包拆分的单个数据包
-    pub fn handle_response(&mut self, mut ctx: MutexGuard<ProxyContext>) {
+    pub fn handle_response(&mut self, mut ctx: &mut ProxyContext) {
         // info!("mysql_exec_start_time:{:?}",ctx.mysql_exec_start_time);
         ctx.total_duration = (Instant::now() - ctx.fn_start_time).as_millis() as i64;
 
@@ -366,15 +379,14 @@ impl VirtDBConnectionHandler {
         }
     }
 
-    pub async fn handle_remote_response_finished(&mut self, ctx: Arc<Mutex<ProxyContext>>, full_response: &Vec<u8>) {
-        let ctx = ctx.lock().await;
+    pub async fn handle_remote_response_finished(&mut self, ctx: ProxyContext, full_response: &Vec<u8>) {
         // info!("handle_remote_response_finished,sql:{:?},total_duration:{:?},mysql_duration:{:?},redis_duration:{:?},start_time:{:?}",ctx.sql,ctx.total_duration,ctx.mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time);
         if let None = ctx.sql {
             return;
         }
-        if let None = ctx.mysql_exec_start_time {
-            return;
-        }
+        // if let None = ctx.mysql_exec_start_time {
+        //     return;
+        // }
         let mysql_duration = ctx.mysql_duration;
         let total_duration = ctx.total_duration;
 
@@ -409,6 +421,7 @@ impl VirtDBConnectionHandler {
                 redis_duration: ctx.redis_duration,
                 from_cache: ctx.from_cache,
             };
+            // info!("handle_remote_response_finished(). sql:{:?}",sql);
             let send_result = self.exec_log_channel_sender.send(exec_log).await;
             match send_result {
                 Ok(_) => {}
