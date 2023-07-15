@@ -41,6 +41,7 @@ pub struct ProxyContext {
     pub cache_duration: i32,
     pub total_duration: i64,
     pub mysql_duration: i64,
+    pub skip: bool,//不做任何处理,纯代理
 }
 
 pub async fn handle_client(
@@ -89,13 +90,13 @@ pub async fn handle_client(
                         cache_duration: 0,
                         total_duration: 0,
                         mysql_duration: 0,
+                        skip: false,
                     };
                     let data = r_buf.filled();
 
+                    info!("data:{:?}",String::from_utf8_lossy(data));
                     let packet = Packet::new(data.to_vec());
                     if let Err(_) = packet.packet_type() {
-                        ctx.mysql_exec_start_time = Some(Instant::now());
-                        ctx_sender.send(ctx).await.unwrap();
                         remote_writer.write_all(data).await?;
                         continue;
                     }
@@ -104,7 +105,7 @@ pub async fn handle_client(
                     let sql_result = String::from_utf8(bytes.to_vec());
                     if let Ok(sql) = sql_result {
                         ctx.sql = Some(sql.clone());
-                        // trace!("current sql:{:?}",ctx.sql);
+                        // info!("current sql:{:?}",sql);
                     }
                     let mut conn_handler = conn_handler_wrapper_a.lock().await;
                     let action = conn_handler.handle_request(&mut ctx, packet_type).await;
@@ -112,6 +113,7 @@ pub async fn handle_client(
                     let skip = match action {
                         Action::FORWARD => {
                             ctx.mysql_exec_start_time = Some(Instant::now());
+                            // info!("before send. current sql:{:?}",ctx.sql.clone());
                             ctx_sender.send(ctx).await.expect("send ctx fail");
                             false
                         }
@@ -129,6 +131,7 @@ pub async fn handle_client(
                     };
 
                     if skip {
+                        r_buf.clear();
                         continue;
                     }
 
@@ -160,35 +163,37 @@ pub async fn handle_client(
                     }
                     let data = r_buf.filled();
 
-                    // info!("Received from remote: {:X?}", String::from_utf8_lossy(&buf[..n]).to_string());
+                    // info!("Received from remote: {:X?}", String::from_utf8_lossy(data).to_string());
 
                     if let Ok(current_ctx) = ctx_receiver.try_recv() {
                         //清理上次保存的记录
                         // info!("recv new ctx:{:?},mysql_start_time:{:?},old exists:{:?}", current_ctx.sql,current_ctx.mysql_exec_start_time, cached_ctx.is_some());
-                        // info!("update cache for {:?}",cached_ctx);
                         if let Some(old_ctx) = cached_ctx.clone() {
                             let mut conn_handler = conn_handler_wrapper_b.lock().await;
                             conn_handler.handle_remote_response_finished(old_ctx, &cached_buf).await;
                             cached_buf.clear();
                         }
-
+                        // info!("new ctx:{:?}", current_ctx);
                         cached_ctx = Some(Arc::new(Mutex::new(current_ctx)));
                     }
 
+                    cached_buf.extend_from_slice(data);
+
                     if let Some(mut old_ctx) = cached_ctx.clone() {
                         let old_ctx = old_ctx.lock().await;
-                        if old_ctx.should_update_cache {
-                            if let Some(_) = old_ctx.sql.clone() {
-                                if old_ctx.should_update_cache {
-                                    cached_buf.extend_from_slice(data);
-                                    // println!("cache response local");
-                                }
-                            }
-                        }
+                        // if old_ctx.should_update_cache {
+                        //     if let Some(_) = old_ctx.sql.clone() {
+                        //         if old_ctx.should_update_cache {
+                        //             cached_buf.extend_from_slice(data);
+                        //             // println!("cache response local");
+                        //         }
+                        //     }
+                        // }
                         //handle partial response
                         let mut conn_handler = conn_handler_wrapper_b.lock().await;
                         conn_handler.handle_response(old_ctx);
                     }
+
 
                     let error_extra_msg = format!(
                         "client_writer write_all() fail.remote write to client.ctx:{:?},v:{:?}",
@@ -253,9 +258,9 @@ impl VirtDBConnectionHandler {
         if let None = ctx.sql {
             return Action::FORWARD;
         }
-        let sql = ctx.sql.clone().unwrap();
-        let sql = utils::sys_sql::remove_comments(sql);
-        // info!("sql:{:?}", sql.clone());
+        let origin_sql = ctx.sql.clone().unwrap();
+        let sql = utils::sys_sql::remove_comments(origin_sql.clone());
+        info!("origin_sql:{:?},sql:{:?}",origin_sql, sql.clone());
         let result_action = match packet_type {
             PacketType::ComQuery => {
                 if !sql.clone().to_uppercase().starts_with("SELECT") {
@@ -263,7 +268,8 @@ impl VirtDBConnectionHandler {
                 }
                 let tmp_sql = sql.clone();
                 if tmp_sql.to_uppercase().contains("\0\0\0\u{3}") {
-                    // println!("sqls:{:?}", tmp_sql);
+                    trace!("sqls:{:?}", tmp_sql);
+                    ctx.skip = true;
                     return Action::FORWARD;
                 }
                 // println!("[ComQuery]sql:{:?}", sql);
@@ -345,8 +351,6 @@ impl VirtDBConnectionHandler {
                 return Action::FORWARD;
             }
         };
-        let mysql_exec_start_time = Instant::now();
-        ctx.mysql_exec_start_time = Some(mysql_exec_start_time);
         result_action
     }
 
@@ -364,7 +368,7 @@ impl VirtDBConnectionHandler {
 
     pub async fn handle_remote_response_finished(&mut self, ctx: Arc<Mutex<ProxyContext>>, full_response: &Vec<u8>) {
         let ctx = ctx.lock().await;
-        trace!("handle_remote_response_finished,sql:{:?},total_duration:{:?},mysql_duration:{:?},redis_duration:{:?},start_time:{:?}",ctx.sql,ctx.total_duration,ctx.mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time);
+        // info!("handle_remote_response_finished,sql:{:?},total_duration:{:?},mysql_duration:{:?},redis_duration:{:?},start_time:{:?}",ctx.sql,ctx.total_duration,ctx.mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time);
         if let None = ctx.sql {
             return;
         }
@@ -377,7 +381,7 @@ impl VirtDBConnectionHandler {
         // info!("sql:{:?},mysql_duration:{:?},redis_duration:{:?},mysql_exec_start_time:{:?},total_duration:{:?}",ctx.sql.clone(),mysql_duration,ctx.redis_duration,ctx.mysql_exec_start_time,total_duration);
 
         let sql = ctx.sql.clone().unwrap();
-        if ctx.should_update_cache {
+        if ctx.should_update_cache && !ctx.skip {
             // let cache_key = format!("cache:\"{}\"", sql.clone());
             // let cache_v = full_response.as_slice();
             // println!("save remote response.sql:{:?},v:{:?}", sql.clone(),String::from_utf8_lossy(cache_v));
